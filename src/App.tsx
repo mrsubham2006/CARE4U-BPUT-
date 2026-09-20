@@ -6,6 +6,8 @@ import { DemoJourneyWalkthrough } from './components/common/DemoJourneyWalkthrou
 import { SystemHealthDiagnosticModal } from './components/common/SystemHealthDiagnosticModal';
 import { IntegrationDashboardModal } from './components/common/IntegrationDashboardModal';
 import { EmergencySOSModal } from './components/common/EmergencySOSModal';
+import { GeminiChatModal } from './components/common/GeminiChatModal';
+import { LiveVoiceDoctorModal } from './components/common/LiveVoiceDoctorModal';
 import { AuthContainer } from './components/auth/AuthContainer';
 import { PatientApp } from './components/patient/PatientApp';
 import { AshaPortal } from './components/asha/AshaPortal';
@@ -15,7 +17,7 @@ import { LabPortal } from './components/lab/LabPortal';
 import { PharmacyPortal } from './components/pharmacy/PharmacyPortal';
 import { AmbulancePortal } from './components/ambulance/AmbulancePortal';
 import { CommandCenter } from './components/commandCenter/CommandCenter';
-import { ShieldCheck, HeartPulse, Server, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, HeartPulse, Server, AlertTriangle, Bot, Mic, Sparkles } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
   const { currentUser, authView, setAuthView, isAuthenticated } = useApp();
@@ -24,6 +26,8 @@ const MainLayout: React.FC = () => {
   const [isSystemHealthOpen, setIsSystemHealthOpen] = useState(false);
   const [isIntegrationsOpen, setIsIntegrationsOpen] = useState(false);
   const [isEmergencySosOpen, setIsEmergencySosOpen] = useState(false);
+  const [isGeminiChatOpen, setIsGeminiChatOpen] = useState(false);
+  const [isLiveVoiceOpen, setIsLiveVoiceOpen] = useState(false);
 
   // Strictly enforce authentication: only show role portals when user is authenticated with a valid session
   const isAuthScreen = !isAuthenticated || !currentUser || authView !== 'DASHBOARD';
@@ -37,6 +41,8 @@ const MainLayout: React.FC = () => {
         onOpenSystemTest={() => setIsSystemHealthOpen(true)}
         onOpenIntegrations={() => setIsIntegrationsOpen(true)}
         onOpenEmergencySOS={() => setIsEmergencySosOpen(true)}
+        onOpenGeminiChat={() => setIsGeminiChatOpen(true)}
+        onOpenLiveVoice={() => setIsLiveVoiceOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -58,6 +64,31 @@ const MainLayout: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Floating AI Hub Action Bar */}
+      <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2">
+        <button
+          onClick={() => setIsLiveVoiceOpen(true)}
+          className="p-3 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white shadow-xl shadow-purple-600/30 border border-purple-400/30 transition transform hover:scale-105 cursor-pointer flex items-center gap-2 group"
+          title="Open Live Voice Doctor (gemini-3.8-live)"
+        >
+          <Mic className="w-5 h-5 animate-pulse text-purple-200" />
+          <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 text-xs font-bold pr-1">
+            Live Voice (3.8)
+          </span>
+        </button>
+
+        <button
+          onClick={() => setIsGeminiChatOpen(true)}
+          className="p-3 rounded-full bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-slate-950 shadow-xl shadow-teal-500/30 border border-teal-300/40 transition transform hover:scale-105 cursor-pointer flex items-center gap-2 group"
+          title="Open Gemini AI Medical Assistant"
+        >
+          <Bot className="w-5 h-5 font-bold" />
+          <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 text-xs font-bold pr-1">
+            Gemini Chat
+          </span>
+        </button>
+      </div>
 
       {/* Persistent Footer */}
       <footer className="bg-slate-950 border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-400 space-y-2">
@@ -133,6 +164,18 @@ const MainLayout: React.FC = () => {
       <EmergencySOSModal
         isOpen={isEmergencySosOpen}
         onClose={() => setIsEmergencySosOpen(false)}
+      />
+
+      {/* Gemini AI Multi-Turn Healthcare Assistant Modal */}
+      <GeminiChatModal
+        isOpen={isGeminiChatOpen}
+        onClose={() => setIsGeminiChatOpen(false)}
+      />
+
+      {/* Gemini 3.8 Live Voice Doctor Modal */}
+      <LiveVoiceDoctorModal
+        isOpen={isLiveVoiceOpen}
+        onClose={() => setIsLiveVoiceOpen(false)}
       />
     </div>
   );

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../services/store';
 import { Language, StructuredIntakeData, TriageUrgency } from '../../types';
+import { AudioTranscriber } from '../common/AudioTranscriber';
 
 interface AIHealthIntakeViewProps {
   onProceedToBooking: (department?: string, urgency?: TriageUrgency) => void;
@@ -213,6 +214,14 @@ export const AIHealthIntakeView: React.FC<AIHealthIntakeViewProps> = ({
                 rows={4}
                 placeholder="E.g., I have had a high fever for 3 days with intense headache, dry cough, and weakness. I am also experiencing slight breathlessness on exertion..."
                 className="w-full px-4 py-3 rounded-2xl bg-slate-950 border border-slate-700 text-white text-xs leading-relaxed focus:outline-none focus:border-teal-500"
+              />
+
+              {/* Gemini 3.5 Transcribe Speech-to-Text Module */}
+              <AudioTranscriber
+                onTranscriptComplete={(text) => {
+                  setInputText(prev => prev ? `${prev} ${text}` : text);
+                }}
+                placeholder="Click 'Record Voice' to dictate your symptoms directly using Gemini 3.5 Transcribe..."
               />
             </div>
 

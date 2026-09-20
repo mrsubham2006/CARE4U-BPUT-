@@ -107,7 +107,77 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // 6. Medical Records & Documents
+    // 6. Consultations Collection
+    match /consultations/{consultationId} {
+      allow get: if isValidId(consultationId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.doctorId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn() && isStaff();
+      allow create: if isValidId(consultationId) && isSignedIn() && (
+        getUserRole() in ['DOCTOR', 'SUPER_ADMIN'] || isAdmin()
+      );
+      allow update: if isValidId(consultationId) && isSignedIn() && (
+        getUserRole() in ['DOCTOR', 'SUPER_ADMIN'] || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 7. Pharmacy Orders Collection (Dispensing View Only)
+    match /pharmacyOrders/{orderId} {
+      allow get: if isValidId(orderId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn() && isStaff();
+      allow create: if isValidId(orderId) && isSignedIn() && (
+        getUserRole() in ['DOCTOR', 'SUPER_ADMIN'] || isAdmin()
+      );
+      allow update: if isValidId(orderId) && isSignedIn() && (
+        getUserRole() in ['PHARMACY_STAFF', 'DOCTOR', 'SUPER_ADMIN'] || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 8. Diagnostic Lab Reports
+    match /labReports/{reportId} {
+      allow get: if isValidId(reportId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn() && isStaff();
+      allow create: if isValidId(reportId) && isSignedIn() && isStaff();
+      allow update: if isValidId(reportId) && isSignedIn() && isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // 9. Clinical Follow-Ups
+    match /followUps/{followUpId} {
+      allow get: if isValidId(followUpId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.doctorId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(followUpId) && isSignedIn() && isStaff();
+      allow update: if isValidId(followUpId) && isSignedIn() && isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // 10. Medical Records & Documents
+    match /medicalDocuments/{documentId} {
+      allow get: if isValidId(documentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn() && isStaff();
+      allow create: if isValidId(documentId) && isSignedIn() && isStaff();
+      allow update: if isValidId(documentId) && isSignedIn() && isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // 11. Legacy Medical Documents
     match /documents/{documentId} {
       allow get: if isValidId(documentId) && isSignedIn() && (
         resource.data.patientId == request.auth.uid ||
@@ -128,7 +198,22 @@ service cloud.firestore {
       );
     }
 
-    // 7. Consent Tokens (ABDM)
+    // 12. Internal Notifications
+    match /notifications/{notificationId} {
+      allow get, list: if isSignedIn();
+      allow create: if isValidId(notificationId) && isSignedIn();
+      allow update: if isValidId(notificationId) && isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // 13. Audit Logs (Immutable Clinical Trail)
+    match /auditLogs/{logId} {
+      allow get, list: if isSignedIn() && (isStaff() || isAdmin());
+      allow create: if isValidId(logId) && isSignedIn();
+      allow update, delete: if false;
+    }
+
+    // 14. Consent Tokens (ABDM)
     match /consents/{consentId} {
       allow get: if isValidId(consentId) && isSignedIn() && (
         resource.data.patientId == request.auth.uid ||

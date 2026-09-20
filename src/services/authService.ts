@@ -1,6 +1,8 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
@@ -138,31 +140,64 @@ export function validatePassword(password: string): PasswordValidationResult {
 // ==========================================
 
 export function mapFirebaseAuthError(error: any): string {
-  const code = error?.code || '';
-  switch (code) {
+  if (!error) return 'An unexpected authentication error occurred.';
+
+  // Extract error code from various potential Firebase error formats
+  let code = error?.code || error?.error?.code || '';
+  const rawMsg = String(error?.message || '');
+
+  if (!code && rawMsg) {
+    const match = rawMsg.match(/auth\/([a-z0-9-]+)/i) || rawMsg.match(/\(([a-z0-9-\/]+)\)/i);
+    if (match) {
+      code = match[1]?.startsWith('auth/') ? match[1] : `auth/${match[1]}`;
+    }
+  }
+
+  switch (code.toLowerCase()) {
     case 'auth/invalid-credential':
     case 'auth/wrong-password':
+      return 'Invalid email or password. Please verify your credentials.';
     case 'auth/user-not-found':
-      return 'Invalid email or password.';
+      return 'No account found with this email address. Please register or check your email.';
     case 'auth/invalid-email':
       return 'Please enter a valid email address.';
     case 'auth/email-already-in-use':
-      return 'An account with this email already exists. Try logging in or resetting your password.';
+      return 'An account with this email already exists. Please sign in with your password or use "Forgot Password".';
     case 'auth/weak-password':
-      return 'Password is too weak. Please use at least 8 characters with letters, numbers, and symbols.';
+      return 'Password is too weak. Please use at least 8 characters with uppercase, lowercase, numbers, and symbols.';
+    case 'auth/operation-not-allowed':
+      return 'Email/Password sign-in is not enabled in your Firebase Project. Please use "Continue with Google" for instant one-click sign-in.';
     case 'auth/too-many-requests':
       return 'Too many failed attempts. Access temporarily locked for security. Please try again in a few minutes.';
     case 'auth/network-request-failed':
-      return 'Unable to connect to security server. Please check your network connection.';
+      return 'Unable to connect to Firebase security server. Please check your internet connection.';
     case 'auth/user-disabled':
-      return 'This account has been disabled by security administrator.';
+      return 'This account has been disabled by a security administrator.';
     case 'auth/requires-recent-login':
       return 'Please log in again to confirm this sensitive action.';
-    default:
-      if (error?.message && !error.message.includes('Firebase') && !error.message.includes('API key')) {
-        return error.message;
+    case 'auth/unauthorized-domain':
+      return 'This domain is not authorized for Firebase Authentication in the Firebase Console.';
+    case 'auth/popup-closed-by-user':
+      return 'Authentication popup was closed before completion.';
+    case 'permission-denied':
+    case 'firestore/permission-denied':
+      return 'Database permission denied. Your profile could not be created in Firestore. Please check security rules.';
+    case 'unavailable':
+      return 'Firebase database service is temporarily unavailable. Please try again shortly.';
+    default: {
+      // Clean up raw Firebase error messages if present
+      if (rawMsg) {
+        const cleaned = rawMsg
+          .replace(/^FirebaseError:\s*/i, '')
+          .replace(/^Firebase:\s*/i, '')
+          .replace(/Error\s*\(([^)]+)\)\.?/i, '$1')
+          .trim();
+        if (cleaned && !cleaned.toLowerCase().includes('api key')) {
+          return cleaned;
+        }
       }
-      return 'Authentication failed. Please verify your credentials.';
+      return 'Authentication failed. Please verify your credentials or check your connection.';
+    }
   }
 }
 
@@ -276,6 +311,77 @@ export async function loginWithFirebase(
   }
 }
 
+export async function loginWithGoogle(role: UserRole): Promise<LoginResult> {
+  try {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const credential = await signInWithPopup(auth, provider);
+    const fbUser = credential.user;
+
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    const userSnap = await getDoc(userDocRef);
+
+    let appUser: User;
+    if (userSnap.exists()) {
+      appUser = userSnap.data() as User;
+    } else {
+      appUser = {
+        id: fbUser.uid,
+        name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+        email: fbUser.email || '',
+        phone: fbUser.phoneNumber || '+919800000000',
+        role: role,
+        verificationStatus: 'VERIFIED'
+      };
+      await setDoc(userDocRef, {
+        ...appUser,
+        uid: fbUser.uid,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    let patientRecord: Patient | undefined;
+    if (role === 'PATIENT') {
+      const patientDocRef = doc(db, 'patients', fbUser.uid);
+      const patientSnap = await getDoc(patientDocRef);
+      if (patientSnap.exists()) {
+        patientRecord = patientSnap.data() as Patient;
+      } else {
+        patientRecord = {
+          id: fbUser.uid,
+          name: appUser.name,
+          age: 28,
+          gender: 'Male',
+          phone: appUser.phone,
+          email: appUser.email,
+          villageOrCity: 'Central Ward',
+          district: 'District Health Zone',
+          state: 'Maharashtra',
+          healthId: `ABDM-${fbUser.uid.substring(0, 4).toUpperCase()}-MH`,
+          bloodGroup: 'B+'
+        };
+        await setDoc(patientDocRef, {
+          ...patientRecord,
+          uid: fbUser.uid,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+    }
+
+    return {
+      success: true,
+      user: appUser,
+      patient: patientRecord,
+      emailVerified: fbUser.emailVerified
+    };
+  } catch (err: any) {
+    const safeError = mapFirebaseAuthError(err);
+    return { success: false, error: safeError };
+  }
+}
+
 export interface PatientRegistrationParams {
   name: string;
   email: string;
@@ -322,10 +428,14 @@ export async function registerPatientWithFirebase(
     const userCred = await createUserWithEmailAndPassword(auth, email, params.password);
     const fbUser = userCred.user;
 
-    // Update display name on Firebase user
-    await updateProfile(fbUser, { displayName: name });
+    // Update display name on Firebase user (non-blocking)
+    try {
+      await updateProfile(fbUser, { displayName: name });
+    } catch {
+      // Non-fatal if display name update is throttled
+    }
 
-    // Send verification email
+    // Send verification email (non-blocking)
     try {
       await sendEmailVerification(fbUser);
     } catch {

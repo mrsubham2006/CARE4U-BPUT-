@@ -12,7 +12,9 @@ import {
   ShieldCheck,
   LogIn,
   Server,
-  AlertTriangle
+  AlertTriangle,
+  Bot,
+  Mic
 } from 'lucide-react';
 import { getTranslation } from '../../i18n/translations';
 
@@ -22,6 +24,8 @@ interface HeaderProps {
   onOpenSystemTest: () => void;
   onOpenIntegrations?: () => void;
   onOpenEmergencySOS?: () => void;
+  onOpenGeminiChat?: () => void;
+  onOpenLiveVoice?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -29,7 +33,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTour,
   onOpenSystemTest,
   onOpenIntegrations,
-  onOpenEmergencySOS
+  onOpenEmergencySOS,
+  onOpenGeminiChat,
+  onOpenLiveVoice
 }) => {
   const {
     currentUser,
@@ -102,6 +108,36 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Server className="w-3.5 h-3.5 text-indigo-400" />
               <span>Integrations</span>
+            </button>
+          )}
+
+          {/* Gemini AI Chatbot */}
+          {onOpenGeminiChat && (
+            <button
+              onClick={() => {
+                playAudioChime('click');
+                onOpenGeminiChat();
+              }}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 font-bold transition cursor-pointer text-[11px] shadow-sm"
+              title="Open Gemini AI Chat Assistant"
+            >
+              <Bot className="w-3.5 h-3.5 text-teal-400" />
+              <span>Gemini AI</span>
+            </button>
+          )}
+
+          {/* Live Voice Consultation */}
+          {onOpenLiveVoice && (
+            <button
+              onClick={() => {
+                playAudioChime('click');
+                onOpenLiveVoice();
+              }}
+              className="hidden sm:flex items-center gap-1 px-2.5 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/40 font-bold transition cursor-pointer text-[11px] shadow-sm"
+              title="Open Gemini 3.8 Live Voice Doctor"
+            >
+              <Mic className="w-3.5 h-3.5 text-purple-400" />
+              <span>Live Voice</span>
             </button>
           )}
 

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../services/store';
 import { Facility, Doctor } from '../../types';
+import { MapsHealthcareFinder } from '../common/MapsHealthcareFinder';
 
 interface FindHealthcareViewProps {
   onBookDoctor: (doctor: Doctor) => void;
@@ -31,7 +32,7 @@ export const FindHealthcareView: React.FC<FindHealthcareViewProps> = ({
 }) => {
   const { facilities, doctors } = useApp();
 
-  const [activeType, setActiveType] = useState<'ALL' | 'DOCTORS' | 'HOSPITALS' | 'LABS' | 'PHARMACIES'>('ALL');
+  const [activeType, setActiveType] = useState<'ALL' | 'DOCTORS' | 'HOSPITALS' | 'LABS' | 'PHARMACIES' | 'MAPS_GROUNDING'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('ALL');
   const [filterMode, setFilterMode] = useState<'ALL' | 'IN_PERSON' | 'VIDEO'>('ALL');
@@ -117,21 +118,30 @@ export const FindHealthcareView: React.FC<FindHealthcareViewProps> = ({
 
         {/* Category Tabs */}
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80">
-          {(['ALL', 'DOCTORS', 'HOSPITALS', 'LABS', 'PHARMACIES'] as const).map(tab => (
+          {(['ALL', 'DOCTORS', 'HOSPITALS', 'LABS', 'PHARMACIES', 'MAPS_GROUNDING'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveType(tab)}
               className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activeType === tab
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
                   : 'bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-850'
               }`}
             >
-              {tab === 'ALL' ? 'All Results' : tab}
+              {tab === 'ALL'
+                ? 'All Results'
+                : tab === 'MAPS_GROUNDING'
+                ? '📍 Google Maps Live Locator'
+                : tab}
             </button>
           ))}
         </div>
       </div>
+
+      {/* Google Maps Live Grounding Finder */}
+      {(activeType === 'ALL' || activeType === 'MAPS_GROUNDING') && (
+        <MapsHealthcareFinder className="mb-6" />
+      )}
 
       {/* Doctors Grid */}
       {(activeType === 'ALL' || activeType === 'DOCTORS') && (
