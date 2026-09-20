@@ -1,0 +1,145 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Core authenticated user profile and RBAC role assignment",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 254 },
+        "role": { "type": "string", "enum": ["PATIENT", "ASHA_WORKER", "DOCTOR", "HOSPITAL_ADMIN", "LAB_STAFF", "PHARMACY_STAFF", "AMBULANCE_OPERATOR", "SUPER_ADMIN", "HEALTH_AUTHORITY"] },
+        "phone": { "type": "string", "maxLength": 20 },
+        "phoneVerified": { "type": "boolean" },
+        "name": { "type": "string", "maxLength": 150 },
+        "verificationStatus": { "type": "string", "enum": ["VERIFIED", "PENDING_VERIFICATION", "REJECTED"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "role", "name", "phone"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Comprehensive electronic health profile mapped 1:1 to Firebase UID",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "fullName": { "type": "string", "maxLength": 150 },
+        "dateOfBirth": { "type": "string", "maxLength": 20 },
+        "gender": { "type": "string", "enum": ["Male", "Female", "Other"] },
+        "phone": { "type": "string", "maxLength": 20 },
+        "phoneVerified": { "type": "boolean" },
+        "email": { "type": "string", "maxLength": 254 },
+        "address": { "type": "string", "maxLength": 300 },
+        "villageOrCity": { "type": "string", "maxLength": 100 },
+        "district": { "type": "string", "maxLength": 100 },
+        "state": { "type": "string", "maxLength": 100 },
+        "healthId": { "type": "string", "maxLength": 50 },
+        "bloodGroup": { "type": "string", "maxLength": 10 },
+        "emergencyContact": { "type": "string", "maxLength": 150 },
+        "preferredLanguage": { "type": "string", "maxLength": 10 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "fullName", "phone"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Clinical OPD or Teleconsultation booking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "patientName": { "type": "string", "maxLength": 150 },
+        "doctorId": { "type": "string", "maxLength": 128 },
+        "doctorName": { "type": "string", "maxLength": 150 },
+        "facilityId": { "type": "string", "maxLength": 128 },
+        "facilityName": { "type": "string", "maxLength": 150 },
+        "scheduledTime": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 50 },
+        "queueToken": { "type": "string", "maxLength": 20 }
+      },
+      "required": ["id", "patientId", "doctorId", "facilityId", "status"]
+    },
+    "Prescription": {
+      "title": "Prescription",
+      "description": "Doctor authored e-prescription order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "doctorId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "patientId", "doctorId", "status"]
+    },
+    "LabOrder": {
+      "title": "LabOrder",
+      "description": "Diagnostic pathology or radiology order",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "doctorId": { "type": "string", "maxLength": 128 },
+        "testName": { "type": "string", "maxLength": 150 },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "patientId", "doctorId", "testName", "status"]
+    },
+    "MedicalRecordDocument": {
+      "title": "MedicalRecordDocument",
+      "description": "Encrypted patient health records and scans",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "title": { "type": "string", "maxLength": 200 }
+      },
+      "required": ["id", "patientId", "title"]
+    },
+    "ConsentToken": {
+      "title": "ConsentToken",
+      "description": "ABDM digital consent authorization for doctor access",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "patientId": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "patientId", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User account authentication and identity metadata linked to auth UID"
+    },
+    "/patients/{uid}": {
+      "schema": "Patient",
+      "description": "Single patient profile document per Firebase UID"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Patient appointment bookings"
+    },
+    "/prescriptions/{prescriptionId}": {
+      "schema": "Prescription",
+      "description": "E-prescriptions authored by clinicians"
+    },
+    "/labOrders/{labOrderId}": {
+      "schema": "LabOrder",
+      "description": "Diagnostic laboratory tests and reports"
+    },
+    "/documents/{documentId}": {
+      "schema": "MedicalRecordDocument",
+      "description": "Patient health documents"
+    },
+    "/consents/{consentId}": {
+      "schema": "ConsentToken",
+      "description": "Patient consent authorizations"
+    },
+    "/system_health/{probeId}": {
+      "schema": "User",
+      "description": "Diagnostic probe document for health check"
+    }
+  }
+}

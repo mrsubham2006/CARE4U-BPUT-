@@ -1,0 +1,6 @@
+{
+  "name": "CARE4U NEXUS",
+  "description": "AI-powered connected healthcare coordination and capacity intelligence network connecting patients, clinicians, facilities, diagnostics, pharmacy and command centers.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

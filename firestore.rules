@@ -1,0 +1,157 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Hardened Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function getUserRole() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isStaff() {
+      return getUserRole() in ['DOCTOR', 'ASHA_WORKER', 'HOSPITAL_ADMIN', 'LAB_STAFF', 'PHARMACY_STAFF', 'SUPER_ADMIN'];
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'pradhansubham024@gmail.com' ||
+        getUserRole() == 'SUPER_ADMIN'
+      );
+    }
+
+    // 1. Users Collection (Linked strictly 1:1 to Firebase UID)
+    match /users/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isStaff());
+      allow list: if isAdmin();
+      allow create: if isValidId(uid) && isOwner(uid) && request.resource.data.uid == uid;
+      allow update: if isValidId(uid) && (
+        (isOwner(uid) && request.resource.data.uid == uid && request.resource.data.role == resource.data.role) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 2. Patients Collection (Linked strictly 1:1 to Firebase UID)
+    match /patients/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isStaff());
+      allow list: if isStaff();
+      allow create: if isValidId(uid) && (isOwner(uid) && request.resource.data.uid == uid || getUserRole() == 'ASHA_WORKER');
+      allow update: if isValidId(uid) && (isOwner(uid) || isStaff());
+      allow delete: if isAdmin();
+    }
+
+    // 3. Appointments Collection
+    match /appointments/{appointmentId} {
+      allow get: if isValidId(appointmentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.doctorId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(appointmentId) && isSignedIn() && (
+        request.resource.data.patientId == request.auth.uid ||
+        getUserRole() == 'ASHA_WORKER' ||
+        isAdmin()
+      );
+      allow update: if isValidId(appointmentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        resource.data.doctorId == request.auth.uid ||
+        isStaff()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // 4. Prescriptions Collection
+    match /prescriptions/{prescriptionId} {
+      allow get: if isValidId(prescriptionId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(prescriptionId) && isSignedIn() && (
+        getUserRole() in ['DOCTOR', 'SUPER_ADMIN']
+      );
+      allow update: if isValidId(prescriptionId) && isSignedIn() && isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // 5. Diagnostic Lab Orders Collection
+    match /labOrders/{labOrderId} {
+      allow get: if isValidId(labOrderId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(labOrderId) && isSignedIn() && (
+        getUserRole() in ['DOCTOR', 'SUPER_ADMIN']
+      );
+      allow update: if isValidId(labOrderId) && isSignedIn() && isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // 6. Medical Records & Documents
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(documentId) && isSignedIn() && (
+        request.resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow update: if isValidId(documentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow delete: if isValidId(documentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 7. Consent Tokens (ABDM)
+    match /consents/{consentId} {
+      allow get: if isValidId(consentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow list: if isSignedIn();
+      allow create: if isValidId(consentId) && isSignedIn() && (
+        request.resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow update: if isValidId(consentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isStaff()
+      );
+      allow delete: if isValidId(consentId) && isSignedIn() && (
+        resource.data.patientId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
+    // 8. System Health Diagnostic Probes (Used only for live connection probing)
+    match /system_health/{probeId} {
+      allow read, write: if true;
+    }
+  }
+}
