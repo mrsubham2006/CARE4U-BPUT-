@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../services/store';
 import { Appointment, Patient, User } from '../../types';
+import { DoctorCopilot } from '../../ai/doctorCopilot';
 import {
   DoctorVitals,
   PrescribedMedicineItem,
@@ -178,6 +179,27 @@ export const ConsultationWorkspace: React.FC<ConsultationWorkspaceProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionResult, setSubmissionResult] = useState<ConsultationSubmissionResult | null>(null);
   const [showConfirmationSummary, setShowConfirmationSummary] = useState(false);
+  const [isCopilotLoading, setIsCopilotLoading] = useState(false);
+  const [copilotQuestions, setCopilotQuestions] = useState<string[]>([]);
+
+  const handleRunDoctorCopilot = async () => {
+    setIsCopilotLoading(true);
+    try {
+      const draft = await DoctorCopilot.draftConsultationNote(
+        patient || ({ name: appointment.patientName, age: 34, gender: 'Unknown' } as any),
+        chiefComplaint,
+        `BP ${vitals.bloodPressure}, Pulse ${vitals.pulseRate}, SpO2 ${vitals.spO2}, Temp ${vitals.temperature}`
+      );
+      setExaminationNotes(draft.objective);
+      setAssessment(draft.assessment);
+      setTreatmentPlan(draft.plan);
+      setCopilotQuestions(draft.suggestedFollowUpQuestions || []);
+      setIsCopilotLoading(false);
+      if (playAudioChime) playAudioChime('success');
+    } catch {
+      setIsCopilotLoading(false);
+    }
+  };
 
   // Handlers for medicines
   const addMedicine = (med: PrescribedMedicineItem) => {
@@ -438,10 +460,35 @@ export const ConsultationWorkspace: React.FC<ConsultationWorkspaceProps> = ({
 
           {/* Clinical Examination & Observations */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-3">
-            <div className="flex items-center gap-2 text-white font-bold text-xs font-mono uppercase tracking-wider">
-              <FileText className="w-4 h-4 text-blue-400" />
-              <span>Clinical Examination & Physical Findings</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-white font-bold text-xs font-mono uppercase tracking-wider">
+                <FileText className="w-4 h-4 text-blue-400" />
+                <span>Clinical Examination & Physical Findings</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleRunDoctorCopilot}
+                disabled={isCopilotLoading}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-purple-900/30 transition disabled:opacity-50 cursor-pointer"
+              >
+                {isCopilotLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-amber-300" />}
+                <span>{isCopilotLoading ? 'Drafting SOAP...' : 'AI Doctor Copilot (Draft Note)'}</span>
+              </button>
             </div>
+
+            {copilotQuestions.length > 0 && (
+              <div className="p-3 rounded-2xl bg-purple-950/40 border border-purple-500/30 text-xs text-purple-200 space-y-1">
+                <div className="font-bold text-amber-300 flex items-center gap-1 text-[11px]">
+                  <Sparkles className="w-3 h-3" />
+                  <span>AI Suggested Follow-up Questions for Patient:</span>
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-slate-300">
+                  {copilotQuestions.map((q, idx) => (
+                    <li key={idx}>{q}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <textarea
               rows={3}

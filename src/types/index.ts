@@ -378,6 +378,14 @@ export interface Consultation {
   createdAt: string;
 }
 
+export interface LabParameter {
+  parameterName: string;
+  value: string | number;
+  unit: string;
+  normalRange: string;
+  flag: string;
+}
+
 export interface LabOrder {
   id: string;
   consultationId: string;
@@ -402,13 +410,7 @@ export interface LabOrder {
     referenceRange: string;
     flag?: 'Normal' | 'High' | 'Low';
   }[];
-  parameters?: {
-    parameterName: string;
-    value: string | number;
-    unit: string;
-    normalRange: string;
-    flag: string;
-  }[];
+  parameters?: LabParameter[];
   aiExtractedInsights?: string;
   reportFileUrl?: string;
 }

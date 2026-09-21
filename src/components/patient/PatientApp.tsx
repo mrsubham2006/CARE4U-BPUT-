@@ -24,6 +24,7 @@ import { EmergencyShortcutView } from './EmergencyShortcutView';
 import { HealthAnalyticsView } from './HealthAnalyticsView';
 import { FamilyProfilesView } from './FamilyProfilesView';
 import { HealthInsuranceSchemesView } from './HealthInsuranceSchemesView';
+import { HealthEducationWellnessView } from './HealthEducationWellnessView';
 import { Doctor } from '../../types';
 import { BiometricProtectedGate } from './BiometricProtectedGate';
 
@@ -38,6 +39,7 @@ import {
   ShieldCheck,
   QrCode,
   Video,
+  BookOpen,
   MessageSquare,
   AlertTriangle,
   User,
@@ -74,7 +76,8 @@ export type PatientViewTab =
   | 'VITALS_ANALYTICS'
   | 'FAMILY_PROFILES'
   | 'INSURANCE_PMJAY'
-  | 'PAYMENTS_BILLING';
+  | 'PAYMENTS_BILLING'
+  | 'HEALTH_EDUCATION';
 
 export const PatientApp: React.FC = () => {
   const {
@@ -210,6 +213,7 @@ export const PatientApp: React.FC = () => {
             { id: 'FAMILY_PROFILES', label: t.navFamilyProfiles, icon: <Users className="w-3.5 h-3.5 text-teal-400" /> },
             { id: 'INSURANCE_PMJAY', label: t.navInsurancePmjay, icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" /> },
             { id: 'PAYMENTS_BILLING', label: t.navBilling, icon: <CreditCard className="w-3.5 h-3.5 text-slate-300" /> },
+            { id: 'HEALTH_EDUCATION', label: 'Education & Wellness', icon: <BookOpen className="w-3.5 h-3.5 text-teal-400" /> },
             { id: 'EMERGENCY_SOS', label: t.navEmergencySos, icon: <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> }
           ].map(item => (
             <button
@@ -362,6 +366,10 @@ export const PatientApp: React.FC = () => {
 
       {activeTab === 'PAYMENTS_BILLING' && (
         <PaymentsBillingView />
+      )}
+
+      {activeTab === 'HEALTH_EDUCATION' && (
+        <HealthEducationWellnessView />
       )}
     </div>
   );

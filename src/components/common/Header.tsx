@@ -18,6 +18,7 @@ import {
   Globe
 } from 'lucide-react';
 import { getTranslation, SUPPORTED_LANGUAGES } from '../../i18n/translations';
+import { DataModeService } from '../../ai/dataMode';
 
 interface HeaderProps {
   onOpenNotifications: () => void;
@@ -27,6 +28,7 @@ interface HeaderProps {
   onOpenEmergencySOS?: () => void;
   onOpenGeminiChat?: () => void;
   onOpenLiveVoice?: () => void;
+  onOpenVoiceSettings?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,7 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenIntegrations,
   onOpenEmergencySOS,
   onOpenGeminiChat,
-  onOpenLiveVoice
+  onOpenLiveVoice,
+  onOpenVoiceSettings
 }) => {
   const {
     currentUser,
@@ -258,6 +261,42 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             )}
           </button>
+
+          {/* Demo / Live Data Mode Indicator */}
+          <button
+            onClick={() => {
+              playAudioChime('click');
+              DataModeService.setMode(DataModeService.isDemo() ? 'live' : 'demo');
+              window.location.reload();
+            }}
+            title={
+              DataModeService.isDemo()
+                ? 'Running in Demo Data Mode. Click to switch to Live Services.'
+                : 'Running in Live Services Mode. Click to switch to Demo Data.'
+            }
+            className={`px-2 py-1 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
+              DataModeService.isDemo()
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                : 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${DataModeService.isDemo() ? 'bg-amber-400' : 'bg-emerald-400 animate-ping'}`} />
+            <span>{DataModeService.isDemo() ? 'Demo Mode' : 'Live Mode'}</span>
+          </button>
+
+          {/* Voice Settings Button */}
+          {onOpenVoiceSettings && (
+            <button
+              onClick={() => {
+                playAudioChime('click');
+                onOpenVoiceSettings();
+              }}
+              className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              title="HealthAI Voice Assistant Settings"
+            >
+              <Mic className="w-4 h-4 text-teal-400" />
+            </button>
+          )}
 
           {/* Notification Bell */}
           <button

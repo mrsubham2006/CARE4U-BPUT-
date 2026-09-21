@@ -8,8 +8,14 @@ import { IntegrationDashboardModal } from './components/common/IntegrationDashbo
 import { EmergencySOSModal } from './components/common/EmergencySOSModal';
 import { GeminiChatModal } from './components/common/GeminiChatModal';
 import { LiveVoiceDoctorModal } from './components/common/LiveVoiceDoctorModal';
-import { VoiceCommandBar } from './components/common/VoiceCommandBar';
 import { voiceCommandService } from './services/voiceCommandService';
+import { VoiceProvider, useVoice } from './services/voice/VoiceContext';
+import {
+  HealthAIVoiceWidget,
+  VoiceConfirmationModal,
+  VoiceHelpModal,
+  VoiceSettingsModal
+} from './components/voice';
 import { Language, UserRole } from './types';
 import { AuthContainer } from './components/auth/AuthContainer';
 import { PatientApp } from './components/patient/PatientApp';
@@ -21,6 +27,11 @@ import { PharmacyPortal } from './components/pharmacy/PharmacyPortal';
 import { AmbulancePortal } from './components/ambulance/AmbulancePortal';
 import { CommandCenter } from './components/commandCenter/CommandCenter';
 import { ShieldCheck, HeartPulse, Server, AlertTriangle, Bot, Mic, Sparkles } from 'lucide-react';
+
+const HeaderWithVoice: React.FC<React.ComponentProps<typeof Header>> = (props) => {
+  const { setIsSettingsOpen } = useVoice();
+  return <Header {...props} onOpenVoiceSettings={() => setIsSettingsOpen(true)} />;
+};
 
 const MainLayout: React.FC = () => {
   const {
@@ -89,17 +100,35 @@ const MainLayout: React.FC = () => {
   const isAuthScreen = !isAuthenticated || !currentUser || authView !== 'DASHBOARD';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-teal-500 selection:text-white">
-      {/* Top Header */}
-      <Header
-        onOpenNotifications={() => setIsNotificationOpen(true)}
-        onOpenTour={() => setIsTourOpen(true)}
-        onOpenSystemTest={() => setIsSystemHealthOpen(true)}
-        onOpenIntegrations={() => setIsIntegrationsOpen(true)}
-        onOpenEmergencySOS={() => setIsEmergencySosOpen(true)}
-        onOpenGeminiChat={() => setIsGeminiChatOpen(true)}
-        onOpenLiveVoice={() => setIsLiveVoiceOpen(true)}
-      />
+    <VoiceProvider
+      onOpenSOSModal={() => setIsEmergencySosOpen(true)}
+      onOpenGeminiModal={(query) => {
+        setGeminiInitialQuery(query);
+        setIsGeminiChatOpen(true);
+      }}
+      onOpenLiveVoiceModal={() => setIsLiveVoiceOpen(true)}
+      onOpenTourModal={() => setIsTourOpen(true)}
+      onOpenSystemTestModal={() => setIsSystemHealthOpen(true)}
+      onCloseAllModals={() => {
+        setIsGeminiChatOpen(false);
+        setIsLiveVoiceOpen(false);
+        setIsEmergencySosOpen(false);
+        setIsSystemHealthOpen(false);
+        setIsTourOpen(false);
+        setIsNotificationOpen(false);
+      }}
+    >
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-teal-500 selection:text-white">
+        {/* Top Header */}
+        <HeaderWithVoice
+          onOpenNotifications={() => setIsNotificationOpen(true)}
+          onOpenTour={() => setIsTourOpen(true)}
+          onOpenSystemTest={() => setIsSystemHealthOpen(true)}
+          onOpenIntegrations={() => setIsIntegrationsOpen(true)}
+          onOpenEmergencySOS={() => setIsEmergencySosOpen(true)}
+          onOpenGeminiChat={() => setIsGeminiChatOpen(true)}
+          onOpenLiveVoice={() => setIsLiveVoiceOpen(true)}
+        />
 
       {/* Main Content Area */}
       <main className="flex-1 pb-16">
@@ -146,8 +175,17 @@ const MainLayout: React.FC = () => {
         </button>
       </div>
 
-      {/* Universal Floating Voice Command HUD */}
-      <VoiceCommandBar />
+      {/* Global HealthAI Voice Assistant HUD */}
+      <HealthAIVoiceWidget />
+
+      {/* HealthAI Consequential Action Safety Confirmation Modal */}
+      <VoiceConfirmationModal />
+
+      {/* HealthAI "What Can I Say?" Voice Help Modal */}
+      <VoiceHelpModal />
+
+      {/* HealthAI Voice Settings Modal */}
+      <VoiceSettingsModal />
 
       {/* Persistent Footer */}
       <footer className="bg-slate-950 border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-400 space-y-2">
@@ -241,6 +279,7 @@ const MainLayout: React.FC = () => {
         onClose={() => setIsLiveVoiceOpen(false)}
       />
     </div>
+    </VoiceProvider>
   );
 };
 
