@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from '../../services/store';
 import { getTranslation } from '../../i18n/translations';
+import { voiceCommandService } from '../../services/voiceCommandService';
 import { CareJourneyTimeline } from '../common/CareJourneyTimeline';
 import { PatientHomeView } from './PatientHomeView';
 import { PatientProfileView } from './PatientProfileView';
@@ -94,11 +95,35 @@ export const PatientApp: React.FC = () => {
 
   const t = getTranslation(selectedLanguage);
 
-  const handleNavigate = (tab: any) => {
+  const [voiceSymptomQuery, setVoiceSymptomQuery] = useState<string | undefined>(undefined);
+
+  const handleNavigate = useCallback((tab: any) => {
     playAudioChime('click');
     setActiveTab(tab as PatientViewTab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
+  }, [playAudioChime]);
+
+  // Use a ref to always call the latest handleNavigate without re-subscribing
+  const handleNavigateRef = useRef(handleNavigate);
+  useEffect(() => {
+    handleNavigateRef.current = handleNavigate;
+  }, [handleNavigate]);
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'NAVIGATE_TAB' && action.payload) {
+        handleNavigateRef.current(action.payload);
+      } else if (action.type === 'TAKE_MEDICINE') {
+        handleNavigateRef.current('MEDICINES_SCHEDULE');
+      } else if (action.type === 'AI_SYMPTOM_CHECK') {
+        setVoiceSymptomQuery(action.payload);
+        handleNavigateRef.current('AI_INTAKE');
+      } else if (action.type === 'START_VIDEO_CALL') {
+        handleNavigateRef.current('VIDEO_CONSULTATION');
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const handleBookDoctor = (doc: Doctor) => {
     setSelectedDoctorForBooking(doc);
@@ -167,25 +192,25 @@ export const PatientApp: React.FC = () => {
 
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
           {[
-            { id: 'HOME', label: 'Overview', icon: <Heart className="w-3.5 h-3.5" /> },
-            { id: 'PROFILE', label: 'My Profile', icon: <User className="w-3.5 h-3.5" /> },
-            { id: 'AI_INTAKE', label: 'AI Intake', icon: <Sparkles className="w-3.5 h-3.5 text-teal-400" /> },
-            { id: 'FIND_CARE', label: 'Find Care', icon: <Search className="w-3.5 h-3.5 text-cyan-400" /> },
-            { id: 'BOOK_APPOINTMENT', label: 'Book Slot', icon: <Calendar className="w-3.5 h-3.5 text-emerald-400" /> },
-            { id: 'MY_APPOINTMENTS', label: 'Appointments', icon: <Clock className="w-3.5 h-3.5 text-indigo-400" /> },
-            { id: 'QUEUE_PASS', label: 'Live Pass & Queue', icon: <QrCode className="w-3.5 h-3.5 text-amber-400" /> },
-            { id: 'PRESCRIPTIONS', label: 'Prescriptions', icon: <Pill className="w-3.5 h-3.5 text-teal-400" /> },
-            { id: 'MEDICINES_SCHEDULE', label: 'Med Schedule', icon: <Clock className="w-3.5 h-3.5 text-amber-400" /> },
-            { id: 'LAB_REPORTS', label: 'Lab Reports', icon: <FileText className="w-3.5 h-3.5 text-purple-400" /> },
-            { id: 'HEALTH_WALLET', label: 'Health Wallet', icon: <FolderOpen className="w-3.5 h-3.5 text-cyan-400" /> },
-            { id: 'TIMELINE', label: 'Care Timeline', icon: <Activity className="w-3.5 h-3.5 text-teal-400" /> },
-            { id: 'CONSENT_SHARING', label: 'Privacy & Consent', icon: <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" /> },
-            { id: 'HEALTH_ID_QR', label: 'Health Card', icon: <QrCode className="w-3.5 h-3.5 text-emerald-400" /> },
-            { id: 'VITALS_ANALYTICS', label: 'Vitals Analytics', icon: <Activity className="w-3.5 h-3.5 text-rose-400" /> },
-            { id: 'FAMILY_PROFILES', label: 'Family Profiles', icon: <Users className="w-3.5 h-3.5 text-teal-400" /> },
-            { id: 'INSURANCE_PMJAY', label: 'PM-JAY Insurance', icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" /> },
-            { id: 'PAYMENTS_BILLING', label: 'Billing & Invoices', icon: <CreditCard className="w-3.5 h-3.5 text-slate-300" /> },
-            { id: 'EMERGENCY_SOS', label: 'Emergency SOS', icon: <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> }
+            { id: 'HOME', label: t.navOverview, icon: <Heart className="w-3.5 h-3.5" /> },
+            { id: 'PROFILE', label: t.navProfile, icon: <User className="w-3.5 h-3.5" /> },
+            { id: 'AI_INTAKE', label: t.navAIIntake, icon: <Sparkles className="w-3.5 h-3.5 text-teal-400" /> },
+            { id: 'FIND_CARE', label: t.navFindCare, icon: <Search className="w-3.5 h-3.5 text-cyan-400" /> },
+            { id: 'BOOK_APPOINTMENT', label: t.navBookSlot, icon: <Calendar className="w-3.5 h-3.5 text-emerald-400" /> },
+            { id: 'MY_APPOINTMENTS', label: t.navAppointments, icon: <Clock className="w-3.5 h-3.5 text-indigo-400" /> },
+            { id: 'QUEUE_PASS', label: t.navQueuePass, icon: <QrCode className="w-3.5 h-3.5 text-amber-400" /> },
+            { id: 'PRESCRIPTIONS', label: t.navPrescriptions, icon: <Pill className="w-3.5 h-3.5 text-teal-400" /> },
+            { id: 'MEDICINES_SCHEDULE', label: t.navMedSchedule, icon: <Clock className="w-3.5 h-3.5 text-amber-400" /> },
+            { id: 'LAB_REPORTS', label: t.navLabReports, icon: <FileText className="w-3.5 h-3.5 text-purple-400" /> },
+            { id: 'HEALTH_WALLET', label: t.navHealthWallet, icon: <FolderOpen className="w-3.5 h-3.5 text-cyan-400" /> },
+            { id: 'TIMELINE', label: t.navTimeline, icon: <Activity className="w-3.5 h-3.5 text-teal-400" /> },
+            { id: 'CONSENT_SHARING', label: t.navPrivacyConsent, icon: <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" /> },
+            { id: 'HEALTH_ID_QR', label: t.navHealthCard, icon: <QrCode className="w-3.5 h-3.5 text-emerald-400" /> },
+            { id: 'VITALS_ANALYTICS', label: t.navVitalsAnalytics, icon: <Activity className="w-3.5 h-3.5 text-rose-400" /> },
+            { id: 'FAMILY_PROFILES', label: t.navFamilyProfiles, icon: <Users className="w-3.5 h-3.5 text-teal-400" /> },
+            { id: 'INSURANCE_PMJAY', label: t.navInsurancePmjay, icon: <CreditCard className="w-3.5 h-3.5 text-emerald-400" /> },
+            { id: 'PAYMENTS_BILLING', label: t.navBilling, icon: <CreditCard className="w-3.5 h-3.5 text-slate-300" /> },
+            { id: 'EMERGENCY_SOS', label: t.navEmergencySos, icon: <AlertTriangle className="w-3.5 h-3.5 text-red-400" /> }
           ].map(item => (
             <button
               key={item.id}
@@ -218,6 +243,7 @@ export const PatientApp: React.FC = () => {
 
       {activeTab === 'AI_INTAKE' && (
         <AIHealthIntakeView
+          initialSymptoms={voiceSymptomQuery}
           onProceedToBooking={() => handleNavigate('BOOK_APPOINTMENT')}
           onViewFacilities={() => handleNavigate('FIND_CARE')}
         />

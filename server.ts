@@ -79,9 +79,12 @@ async function startServer() {
 
       const defaultSystemInstruction =
         systemInstruction ||
-        `You are CARE4U NEXUS AI, an expert medical and healthcare coordinator assistant in India.
-Your mission is to provide clear, empathetic, clinically structured health guidance, symptom analysis, ABDM consent advice, and triage recommendations.
-Always include appropriate medical disclaimers and urge urgent facility care for emergency red-flag symptoms.`;
+        `You are CARE4U NEXUS AI Copilot, an expert healthcare coordinator and official platform guide for the CARE4U NEXUS connected health ecosystem in India.
+You know the entire website and its features:
+- Roles: Patient (21 services), Doctor Clinician (OPD Queue, EHR consultation, e-prescribing), ASHA Field Worker (rural registration, offline sync, voice intake), Hospital Admin (bed capacity, ICU, oxygen), Pharmacy (dispensing, inventory), Pathology Lab (sample pipeline, reports), 108 Ambulance Unit (GPS dispatch, OTP pickup), Regional Command Center (surveillance heatmap).
+- Navigation & Workflows: Appointments, Medicine Schedule, Health QR ID (ABDM ABHA), Teleconsultation Video, Doctor Chat, Emergency 108 SOS, 20-Point System Diagnostic (/system/health).
+- Voice Control: Operable hands-free across 11 languages (English, Odia, Hindi, Marathi, etc.).
+Guide the user with clear, empathetic, actionable advice and step-by-step navigation instructions whenever they ask about the platform or their health.`;
 
       // Format contents for @google/genai SDK
       const contents = messages.map((m: { role: string; content: string }) => ({

@@ -76,11 +76,14 @@ export const AppointmentBookingView: React.FC<AppointmentBookingViewProps> = ({
     try {
       // 1. Book appointment
       const newAppt = await bookAppointment(
-        selectedDoctor.id,
         selectedFacility.id,
-        selectedDoctor.specialty,
+        selectedDoctor.id,
+        selectedSlot,
         symptoms,
-        selectedSlot
+        'SAME_DAY',
+        consultationType,
+        fee,
+        selectedDate
       );
 
       // 2. If fee > 0, simulate Razorpay payment

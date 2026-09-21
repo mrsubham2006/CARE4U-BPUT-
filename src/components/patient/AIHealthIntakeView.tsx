@@ -20,11 +20,13 @@ import {
 import { useApp } from '../../services/store';
 import { Language, StructuredIntakeData, TriageUrgency } from '../../types';
 import { AudioTranscriber } from '../common/AudioTranscriber';
+import { SUPPORTED_LANGUAGES, getTranslation } from '../../i18n/translations';
 
 interface AIHealthIntakeViewProps {
   onProceedToBooking: (department?: string, urgency?: TriageUrgency) => void;
   onProceedToMedRoute?: (department: string) => void;
   onViewFacilities?: () => void;
+  initialSymptoms?: string;
 }
 
 const COMMON_SYMPTOM_TAGS = [
@@ -43,7 +45,8 @@ const COMMON_SYMPTOM_TAGS = [
 export const AIHealthIntakeView: React.FC<AIHealthIntakeViewProps> = ({
   onProceedToBooking,
   onProceedToMedRoute,
-  onViewFacilities
+  onViewFacilities,
+  initialSymptoms
 }) => {
   const {
     runAIIntake,
@@ -55,7 +58,9 @@ export const AIHealthIntakeView: React.FC<AIHealthIntakeViewProps> = ({
     triggerConfetti
   } = useApp();
 
-  const [inputText, setInputText] = useState('');
+  const t = getTranslation(selectedLanguage);
+
+  const [inputText, setInputText] = useState(initialSymptoms || '');
   const [isRecording, setIsRecording] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [durationDays, setDurationDays] = useState('3');
@@ -63,6 +68,21 @@ export const AIHealthIntakeView: React.FC<AIHealthIntakeViewProps> = ({
   const [attachedFile, setAttachedFile] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [intakeResult, setIntakeResult] = useState<StructuredIntakeData | null>(null);
+
+  React.useEffect(() => {
+    if (initialSymptoms && !intakeResult && !isLoading) {
+      setInputText(initialSymptoms);
+      setIsLoading(true);
+      runAIIntake(initialSymptoms, selectedLanguage)
+        .then(res => {
+          setIntakeResult(res);
+          setIsLoading(false);
+          playAudioChime('success');
+          triggerConfetti();
+        })
+        .catch(() => setIsLoading(false));
+    }
+  }, [initialSymptoms]);
 
   const toggleTag = (tag: string) => {
     if (selectedTags.includes(tag)) {
@@ -141,16 +161,11 @@ export const AIHealthIntakeView: React.FC<AIHealthIntakeViewProps> = ({
               onChange={e => setSelectedLanguage(e.target.value as Language)}
               className="bg-transparent text-white text-xs font-semibold focus:outline-none pr-3 py-1 cursor-pointer"
             >
-              <option value="en" className="bg-slate-900">English (EN)</option>
-              <option value="hi" className="bg-slate-900">हिन्दी (Hindi)</option>
-              <option value="mr" className="bg-slate-900">मराठी (Marathi)</option>
-              <option value="or" className="bg-slate-900">ଓଡ଼ିଆ (Odia)</option>
-              <option value="bn" className="bg-slate-900">বাংলা (Bengali)</option>
-              <option value="te" className="bg-slate-900">తెలుగు (Telugu)</option>
-              <option value="ta" className="bg-slate-900">தமிழ் (Tamil)</option>
-              <option value="kn" className="bg-slate-900">ಕನ್ನಡ (Kannada)</option>
-              <option value="gu" className="bg-slate-900">ગુજરાતી (Gujarati)</option>
-              <option value="pa" className="bg-slate-900">ਪੰਜਾਬੀ (Punjabi)</option>
+              {SUPPORTED_LANGUAGES.map(lang => (
+                <option key={lang.code} value={lang.code} className="bg-slate-900 text-white">
+                  {lang.flag} {lang.nativeName} ({lang.name})
+                </option>
+              ))}
             </select>
           </div>
         </div>

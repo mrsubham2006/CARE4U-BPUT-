@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppProvider, useApp } from './services/store';
 import { Header } from './components/common/Header';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
@@ -8,6 +8,9 @@ import { IntegrationDashboardModal } from './components/common/IntegrationDashbo
 import { EmergencySOSModal } from './components/common/EmergencySOSModal';
 import { GeminiChatModal } from './components/common/GeminiChatModal';
 import { LiveVoiceDoctorModal } from './components/common/LiveVoiceDoctorModal';
+import { VoiceCommandBar } from './components/common/VoiceCommandBar';
+import { voiceCommandService } from './services/voiceCommandService';
+import { Language, UserRole } from './types';
 import { AuthContainer } from './components/auth/AuthContainer';
 import { PatientApp } from './components/patient/PatientApp';
 import { AshaPortal } from './components/asha/AshaPortal';
@@ -20,7 +23,16 @@ import { CommandCenter } from './components/commandCenter/CommandCenter';
 import { ShieldCheck, HeartPulse, Server, AlertTriangle, Bot, Mic, Sparkles } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
-  const { currentUser, authView, setAuthView, isAuthenticated } = useApp();
+  const {
+    currentUser,
+    authView,
+    setAuthView,
+    isAuthenticated,
+    selectedLanguage,
+    setSelectedLanguage,
+    switchRole,
+    logout
+  } = useApp();
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [isSystemHealthOpen, setIsSystemHealthOpen] = useState(false);
@@ -28,6 +40,50 @@ const MainLayout: React.FC = () => {
   const [isEmergencySosOpen, setIsEmergencySosOpen] = useState(false);
   const [isGeminiChatOpen, setIsGeminiChatOpen] = useState(false);
   const [isLiveVoiceOpen, setIsLiveVoiceOpen] = useState(false);
+
+  const [geminiInitialQuery, setGeminiInitialQuery] = useState<string | undefined>(undefined);
+
+  useEffect(() => {
+    voiceCommandService.setLanguage(selectedLanguage);
+  }, [selectedLanguage]);
+
+  useEffect(() => {
+    const unsubscribe = voiceCommandService.subscribe(action => {
+      if (action.type === 'TRIGGER_EMERGENCY_SOS' || action.type === 'DISPATCH_AMBULANCE') {
+        setIsEmergencySosOpen(true);
+      } else if (action.type === 'ASK_GEMINI_AI') {
+        setGeminiInitialQuery(action.payload);
+        setIsGeminiChatOpen(true);
+      } else if (action.type === 'OPEN_MODAL') {
+        if (action.payload === 'GEMINI') setIsGeminiChatOpen(true);
+        if (action.payload === 'LIVE_VOICE') setIsLiveVoiceOpen(true);
+        if (action.payload === 'SOS') setIsEmergencySosOpen(true);
+        if (action.payload === 'SYSTEM_TEST') setIsSystemHealthOpen(true);
+        if (action.payload === 'TOUR') setIsTourOpen(true);
+      } else if (action.type === 'CLOSE_MODALS') {
+        setIsGeminiChatOpen(false);
+        setIsLiveVoiceOpen(false);
+        setIsEmergencySosOpen(false);
+        setIsSystemHealthOpen(false);
+        setIsTourOpen(false);
+        setIsNotificationOpen(false);
+      } else if (action.type === 'SET_LANGUAGE') {
+        setSelectedLanguage(action.payload as Language);
+      } else if (action.type === 'SWITCH_ROLE') {
+        switchRole(action.payload as UserRole);
+      } else if (action.type === 'READ_PAGE') {
+        const roleName = currentUser ? currentUser.role.replace(/_/g, ' ') : 'Landing Page';
+        voiceCommandService.speak(`You are currently on the CARE4U ${roleName} interface. All features and workflows can be commanded hands-free by speaking.`);
+      } else if (action.type === 'AUTH_ACTION') {
+        if (action.payload === 'LOGOUT') {
+          logout();
+        } else if (action.payload === 'CHOOSE_ROLE') {
+          setAuthView('CHOOSE_ROLE');
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [setSelectedLanguage, switchRole, logout, setAuthView, currentUser]);
 
   // Strictly enforce authentication: only show role portals when user is authenticated with a valid session
   const isAuthScreen = !isAuthenticated || !currentUser || authView !== 'DASHBOARD';
@@ -89,6 +145,9 @@ const MainLayout: React.FC = () => {
           </span>
         </button>
       </div>
+
+      {/* Universal Floating Voice Command HUD */}
+      <VoiceCommandBar />
 
       {/* Persistent Footer */}
       <footer className="bg-slate-950 border-t border-slate-900 py-6 px-4 text-center text-xs text-slate-400 space-y-2">
@@ -169,7 +228,11 @@ const MainLayout: React.FC = () => {
       {/* Gemini AI Multi-Turn Healthcare Assistant Modal */}
       <GeminiChatModal
         isOpen={isGeminiChatOpen}
-        onClose={() => setIsGeminiChatOpen(false)}
+        onClose={() => {
+          setIsGeminiChatOpen(false);
+          setGeminiInitialQuery(undefined);
+        }}
+        initialQuery={geminiInitialQuery}
       />
 
       {/* Gemini 3.8 Live Voice Doctor Modal */}

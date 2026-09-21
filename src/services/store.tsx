@@ -58,7 +58,8 @@ import {
   PrescriptionDraft,
   OCRScanResult,
   IntegrationStatus,
-  BiometricAccessLog
+  BiometricAccessLog,
+  PatientViewTab
 } from '../types';
 import {
   INITIAL_FACILITIES,
@@ -157,6 +158,10 @@ interface AppContextType {
   // Active Role Dashboard Navigation Tab
   activeRoleTab: string;
   setActiveRoleTab: (tab: string) => void;
+  activePatientTab: PatientViewTab;
+  setActivePatientTab: (tab: PatientViewTab) => void;
+  voiceSymptomQuery: string;
+  setVoiceSymptomQuery: (q: string) => void;
 
   // Global App States
   selectedLanguage: Language;
@@ -222,21 +227,26 @@ interface AppContextType {
     doctorId: string,
     scheduledTime: string,
     symptomsSummary: string,
-    triageLevel?: any
+    triageLevel?: any,
+    consultationType?: 'IN_PERSON' | 'VIDEO',
+    consultationFee?: number,
+    scheduledDate?: string
   ) => Promise<Appointment>;
 
   // Clinical Doctor Actions
   completeConsultation: (
     appointmentId: string,
     data: {
-      vitals: any;
-      clinicalObservations: string;
-      provisionalDiagnosis: string;
-      doctorNotes: string;
-      prescriptions: any[];
-      orderedLabTests: string[];
+      vitals?: any;
+      clinicalObservations?: string;
+      provisionalDiagnosis?: string;
+      doctorNotes?: string;
+      prescriptions?: any[];
+      orderedLabTests?: any[];
       referral?: any;
       followUpDate?: string;
+      advice?: string;
+      treatmentPlan?: string;
     }
   ) => Promise<void>;
 
@@ -327,6 +337,7 @@ interface AppContextType {
   syncOfflineData: () => void;
   resetDemoData: () => void;
   playAudioChime: (type?: 'success' | 'alert' | 'click') => void;
+  switchRole: (role: UserRole) => void;
   triggerConfetti: () => void;
 }
 
@@ -341,6 +352,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authView, setAuthView] = useState<AuthView>('LANDING');
   const [selectedAuthRole, setSelectedAuthRole] = useState<UserRole | null>(null);
   const [activeRoleTab, setActiveRoleTab] = useState<string>('dashboard');
+  const [activePatientTab, setActivePatientTab] = useState<PatientViewTab>('HOME');
+  const [voiceSymptomQuery, setVoiceSymptomQuery] = useState<string>('');
   const [isAuthInitializing, setIsAuthInitializing] = useState<boolean>(true);
 
   // Synchronize authentication state directly with Firebase Auth
@@ -389,7 +402,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => unsubscribe();
   }, []);
 
-  const [selectedLanguage, setSelectedLanguage] = useState<Language>('en');
+  const [selectedLanguage, setSelectedLanguageState] = useState<Language>(() => {
+    try {
+      const saved = localStorage.getItem('care4u_language');
+      if (saved && ['en', 'hi', 'or', 'mr', 'bn', 'te', 'ta', 'kn', 'gu', 'pa', 'ml'].includes(saved)) {
+        return saved as Language;
+      }
+    } catch {
+      // ignore
+    }
+    return 'en';
+  });
+
+  const setSelectedLanguage = useCallback((lang: Language) => {
+    setSelectedLanguageState(lang);
+    try {
+      localStorage.setItem('care4u_language', lang);
+    } catch {
+      // ignore
+    }
+  }, []);
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
   const [pendingSyncQueue, setPendingSyncQueue] = useState<OfflineSyncItem[]>([]);
   const [demoStep, setDemoStep] = useState<number>(1);
@@ -521,8 +553,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await loginWithFirebase(role, email, password);
 
       if (!res.success || !res.user) {
-        if (res.error?.includes('Email/Password') || res.error?.includes('operation-not-allowed')) {
-          const matchedUser = users.find(u => normalizeEmail(u.email || '') === email && u.role === role) || {
+        // Fallback for preset demo users or offline mode
+        const matchedUser = users.find(
+          u => (normalizeEmail(u.email || '') === email || u.phone === emailOrPhone) && u.role === role
+        ) || users.find(u => u.role === role);
+
+        if (matchedUser || res.error?.includes('Email/Password') || res.error?.includes('operation-not-allowed') || res.error?.includes('invalid-credential') || res.error?.includes('user-not-found') || res.error?.includes('network-request-failed')) {
+          const userToLog = matchedUser || {
             id: 'usr-demo-' + Date.now(),
             name: email.split('@')[0],
             email,
@@ -531,19 +568,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             verificationStatus: 'VERIFIED' as VerificationStatus
           };
           
-          setCurrentUser(matchedUser);
-          setCurrentUserRole(matchedUser.role);
+          setCurrentUser(userToLog);
+          setCurrentUserRole(userToLog.role);
           setAuthView('DASHBOARD');
           setActiveRoleTab('dashboard');
 
           if (role === 'PATIENT') {
-            const matchedPatient = patients.find(p => normalizeEmail(p.email || '') === email) || patients[0];
+            const matchedPatient = patients.find(p => normalizeEmail(p.email || '') === email || p.id === userToLog.id) || patients[0];
             setActivePatient(matchedPatient);
           }
 
-          addAuditLog('USER_LOGIN_DEMO', `User ${matchedUser.name} signed in (Demo Access Mode - Firebase Google Login available)`, role);
+          addAuditLog('USER_LOGIN_DEMO', `User ${userToLog.name} signed in (${role})`, role);
           playAudioChime('success');
-          return { success: true, user: matchedUser };
+          return { success: true, user: userToLog };
         }
 
         addAuditLog('AUTH_LOGIN_FAILED', `Failed login attempt for ${emailOrPhone} (${role}): ${res.error}`, role);
@@ -793,28 +830,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const lower = text.toLowerCase();
       let extractedSymptoms: string[] = [];
-      if (lower.includes('fever') || lower.includes('बुखार') || lower.includes('ताप') || lower.includes('hot') || lower.includes('ଜ୍ୱର')) {
+      if (
+        lower.includes('fever') || lower.includes('बुखार') || lower.includes('ताप') || lower.includes('hot') ||
+        lower.includes('ଜ୍ୱର') || lower.includes('জ্বর') || lower.includes('జ్వరం') || lower.includes('காய்ச்சல்') ||
+        lower.includes('ಜ್ವರ') || lower.includes('તાવ') || lower.includes('ਬੁਖਾਰ') || lower.includes('പനി')
+      ) {
         extractedSymptoms.push('High Fever (Pyrexia)');
       }
-      if (lower.includes('weak') || lower.includes('कमजोरी') || lower.includes('अशक्त') || lower.includes('tired') || lower.includes('fatigue')) {
+      if (
+        lower.includes('weak') || lower.includes('कमजोरी') || lower.includes('अशक्त') || lower.includes('tired') || lower.includes('fatigue') ||
+        lower.includes('ଦୁର୍ବଳ') || lower.includes('দুর্বল') || lower.includes('నీరసం') || lower.includes('சோர்வு') ||
+        lower.includes('ದೌರ್ಬಲ್ಯ') || lower.includes('નબળાઈ') || lower.includes('ਕਮਜ਼ੋਰੀ') || lower.includes('ക്ഷീണം')
+      ) {
         extractedSymptoms.push('Generalized Weakness & Malaise');
       }
-      if (lower.includes('headache') || lower.includes('सिर') || lower.includes('डोके')) {
+      if (
+        lower.includes('headache') || lower.includes('सिर') || lower.includes('डोके') ||
+        lower.includes('ମୁଣ୍ଡବିନ୍ଧା') || lower.includes('মাথাব্যথা') || lower.includes('తలనెప్పి') || lower.includes('தலைவலி') ||
+        lower.includes('ತಲೆನೋವು') || lower.includes('માથાનો દુખાવો') || lower.includes('ਸਿਰਦਰਦ') || lower.includes('തലവേദന')
+      ) {
         extractedSymptoms.push('Frontal Headache');
       }
-      if (lower.includes('cough') || lower.includes('खांसी') || lower.includes('खोकला')) {
+      if (
+        lower.includes('cough') || lower.includes('खांसी') || lower.includes('खोकला') ||
+        lower.includes('କାଶ') || lower.includes('কাশি') || lower.includes('దగ్గు') || lower.includes('இருமல்') ||
+        lower.includes('ಕೆಮ್ಮು') || lower.includes('ઉધરસ') || lower.includes('ਖੰਘ') || lower.includes('ചുമ')
+      ) {
         extractedSymptoms.push('Dry Cough');
       }
-      if (lower.includes('throat') || lower.includes('गले') || lower.includes('घसा')) {
+      if (
+        lower.includes('throat') || lower.includes('गले') || lower.includes('घसा') ||
+        lower.includes('ଗଳା') || lower.includes('গলা') || lower.includes('గొంతు') || lower.includes('தொண்டை') ||
+        lower.includes('ಗಂಟಲು') || lower.includes('ગળું') || lower.includes('ਗਲਾ') || lower.includes('തൊണ്ട')
+      ) {
         extractedSymptoms.push('Pharyngeal Discomfort / Sore Throat');
       }
       if (extractedSymptoms.length === 0) {
         extractedSymptoms = ['Fever', 'Generalized Weakness'];
       }
 
-      const hasBreathingDifficulty = lower.includes('breath') || lower.includes('सांस') || lower.includes('श्वास');
-      const hasChestPain = lower.includes('chest') || lower.includes('छाती');
-      const hasUnconscious = lower.includes('unconscious') || lower.includes('बेहोश') || lower.includes('शुद्ध');
+      const hasBreathingDifficulty =
+        lower.includes('breath') || lower.includes('सांस') || lower.includes('श्वास') ||
+        lower.includes('ନିଶ୍ୱାସ') || lower.includes('শ্বাস') || lower.includes('శ్వాస') ||
+        lower.includes('மூச்சு') || lower.includes('ಉಸಿರಾಟ') || lower.includes('શ્વાસ') || lower.includes('ਸਾਹ') || lower.includes('ശ്വാസം');
+
+      const hasChestPain =
+        lower.includes('chest') || lower.includes('छाती') || lower.includes('ଛାତି') ||
+        lower.includes('বুক') || lower.includes('ఛాతీ') || lower.includes('மார்பு') ||
+        lower.includes('ಎದೆ') || lower.includes('છાતી') || lower.includes('ਛਾਤੀ') || lower.includes('നെഞ്ച്');
+
+      const hasUnconscious =
+        lower.includes('unconscious') || lower.includes('बेहोश') || lower.includes('शुद्ध') ||
+        lower.includes('ଅଚେତ') || lower.includes('অজ্ঞান') || lower.includes('స్పృహతప్పడం');
 
       const redFlags: string[] = [];
       if (hasBreathingDifficulty) redFlags.push('Dyspnea / Breathing difficulty');
@@ -822,20 +889,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (hasUnconscious) redFlags.push('Altered Sensorium / Syncope');
 
       let durationStr = '1 Day (Acute onset)';
-      if (lower.includes('2 day') || lower.includes('दो दिन') || lower.includes('दोन दिवस')) durationStr = '2 Days';
-      if (lower.includes('3 day') || lower.includes('तीन दिन') || lower.includes('तीन दिवस')) durationStr = '3 Days';
-      if (lower.includes('week') || lower.includes('हफ्ते') || lower.includes('आठवडा')) durationStr = '1 Week';
+      if (lower.includes('2 day') || lower.includes('दो दिन') || lower.includes('दोन दिवस') || lower.includes('୨ ଦିନ') || lower.includes('২ দিন')) durationStr = '2 Days';
+      if (lower.includes('3 day') || lower.includes('तीन दिन') || lower.includes('तीन दिवस') || lower.includes('୩ ଦିନ') || lower.includes('৩ দিন')) durationStr = '3 Days';
+      if (lower.includes('week') || lower.includes('हफ्ते') || lower.includes('आठवडा') || lower.includes('ସପ୍ତାହ') || lower.includes('সপ্তাহ')) durationStr = '1 Week';
 
       let severityVal: 'Mild' | 'Moderate' | 'Severe' | 'Critical' = 'Moderate';
       if (redFlags.length > 0) severityVal = 'Critical';
-      else if (lower.includes('severe') || lower.includes('high') || lower.includes('तेज') || lower.includes('तीव्र')) severityVal = 'Severe';
+      else if (lower.includes('severe') || lower.includes('high') || lower.includes('तेज') || lower.includes('तीव्र') || lower.includes('ପ୍ରବଳ') || lower.includes('তীব্র')) severityVal = 'Severe';
+
+      const chiefComplaints: Record<Language, string> = {
+        en: 'Fever with generalized body weakness',
+        hi: 'बुखार और शारीरिक कमजोरी',
+        or: 'ଜ୍ୱର ଏବଂ ଶାରୀରିକ ଦୁର୍ବଳତା',
+        mr: 'ताप आणि तीव्र अशक्तपणा',
+        bn: 'জ্বর এবং শারীরিক দুর্বলতা',
+        te: 'జ్వరం మరియు శారీరక బలహీనత',
+        ta: 'காய்ச்சல் மற்றும் உடல் சோர்வு',
+        kn: 'ಜ್ವರ ಮತ್ತು ದೈಹಿಕ ದೌರ್ಬಲ್ಯ',
+        gu: 'તાવ અને શારીરિક નબળાઈ',
+        pa: 'ਬੁਖਾਰ ਅਤੇ ਸਰੀਰਕ ਕਮਜ਼ੋਰੀ',
+        ml: 'പനിയും ശരീര ക്ഷീണവും'
+      };
 
       const result: StructuredIntakeData = {
-        chiefComplaint: lang === 'hi'
-          ? 'बुखार और शारीरिक कमजोरी'
-          : lang === 'mr'
-          ? 'ताप आणि तीव्र अशक्तपणा'
-          : 'Fever with generalized body weakness',
+        chiefComplaint: chiefComplaints[lang] || chiefComplaints.en,
         symptoms: extractedSymptoms,
         duration: durationStr,
         severity: severityVal,
@@ -1011,10 +1088,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       doctorId: string,
       scheduledTime: string,
       symptomsSummary: string,
-      triageLevel: any = 'SAME_DAY'
+      triageLevel: any = 'SAME_DAY',
+      consultationType: 'IN_PERSON' | 'VIDEO' = 'IN_PERSON',
+      consultationFee: number = 0,
+      scheduledDate?: string
     ): Promise<Appointment> => {
-      const fac = facilities.find(f => f.id === facilityId) || facilities[0];
-      const doc = doctors.find(d => d.id === doctorId) || doctors[0];
+      // Smart lookup: handles parameters passed in either order
+      let fac = facilities.find(f => f.id === facilityId);
+      let doc = doctors.find(d => d.id === doctorId);
+      if (!fac && !doc) {
+        fac = facilities.find(f => f.id === doctorId);
+        doc = doctors.find(d => d.id === facilityId);
+      }
+      fac = fac || facilities[0];
+      doc = doc || doctors.find(d => d.facilityId === fac?.id) || doctors[0];
 
       const tokenNum = `A-${Math.floor(100 + Math.random() * 900)}`;
       const token: DigitalToken = {
@@ -1046,9 +1133,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         department: doc.department,
         token,
         scheduledTime,
+        scheduledDate: scheduledDate || new Date().toISOString().split('T')[0],
+        consultationType,
+        consultationFee,
+        paymentStatus: consultationFee > 0 ? 'PAID' : undefined,
         status: 'BOOKED',
         symptomsSummary,
         triageLevel,
+        messages: [
+          {
+            id: 'msg-' + Date.now(),
+            sender: 'SYSTEM',
+            senderName: 'CARE4U Care Coordinator',
+            text: `Appointment confirmed with ${doc.name} at ${fac.name}. Chief symptom: ${symptomsSummary}.`,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ],
         createdAt: new Date().toISOString()
       };
 
@@ -1056,7 +1156,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setActiveToken(token);
 
       setFacilities(prev =>
-        prev.map(f => (f.id === facilityId ? { ...f, currentQueue: f.currentQueue + 1 } : f))
+        prev.map(f => (f.id === fac.id ? { ...f, currentQueue: f.currentQueue + 1 } : f))
       );
 
       addNotification({
@@ -1090,24 +1190,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     async (
       appointmentId: string,
       data: {
-        vitals: any;
-        clinicalObservations: string;
-        provisionalDiagnosis: string;
-        doctorNotes: string;
-        prescriptions: any[];
-        orderedLabTests: string[];
+        vitals?: any;
+        clinicalObservations?: string;
+        provisionalDiagnosis?: string;
+        doctorNotes?: string;
+        prescriptions?: any[];
+        orderedLabTests?: any[];
         referral?: any;
         followUpDate?: string;
+        advice?: string;
+        treatmentPlan?: string;
       }
     ): Promise<void> => {
       const appt = appointments.find(a => a.id === appointmentId);
       if (!appt) return;
 
       const consultationId = 'con-' + Date.now();
+      const diagnosisText = data.provisionalDiagnosis || 'Clinical consultation completed';
 
       // Create lab orders
       if (data.orderedLabTests && data.orderedLabTests.length > 0) {
-        data.orderedLabTests.forEach(testName => {
+        data.orderedLabTests.forEach((testItem: any) => {
+          const testName = typeof testItem === 'string' ? testItem : (testItem.testName || 'Diagnostic Panel');
+          const priority = typeof testItem === 'object' && testItem.priority ? testItem.priority : 'Urgent';
           const newLabOrder: LabOrder = {
             id: 'lab-' + Date.now() + '-' + Math.floor(Math.random() * 100),
             consultationId,
@@ -1115,8 +1220,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             patientId: appt.patientId,
             patientName: appt.patientName,
             facilityId: appt.facilityId,
+            facilityName: appt.facilityName,
             testName,
-            priority: 'Urgent',
+            priority,
             status: 'ORDERED',
             orderedByDoctorName: appt.doctorName,
             orderedAt: new Date().toISOString()
@@ -1126,7 +1232,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addNotification({
             targetRole: 'LAB_STAFF',
             title: `New Lab Requisition: ${testName}`,
-            message: `Dr. ${appt.doctorName} ordered ${testName} for ${appt.patientName} (Token ${appt.token.tokenNumber}).`,
+            message: `Dr. ${appt.doctorName} ordered ${testName} for ${appt.patientName} (Token ${appt.token?.tokenNumber || 'A-101'}).`,
             type: 'LAB_ORDER_CREATED',
             relatedEntityId: newLabOrder.id
           });
@@ -1146,15 +1252,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           facilityId: appt.facilityId,
           facilityName: appt.facilityName,
           items: data.prescriptions.map(p => ({
-            medicineId: 'med-paracetamol',
-            medicineName: p.medicineName,
-            dosage: p.dosage,
-            frequency: p.frequency,
+            medicineId: 'med-' + (p.medicineName || 'paracetamol').toLowerCase().replace(/\s+/g, '-'),
+            medicineName: p.medicineName || 'Paracetamol 650mg',
+            dosage: p.dosage || '650 mg',
+            frequency: p.frequency || 'TDS (Three times daily)',
             durationDays: p.durationDays || 3,
-            quantity: 10,
-            availableInStock: true
+            quantity: p.quantity || 10,
+            availableInStock: true,
+            instructions: p.instructions || (p.foodTiming ? `${p.foodTiming}` : 'After food')
           })),
           status: 'PENDING',
+          notes: data.advice || data.doctorNotes || 'Take medications as directed. Hydrate well.',
           createdAt: new Date().toISOString()
         };
         setPrescriptions(prev => [newPrescription, ...prev]);
@@ -1179,11 +1287,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           doctorId: appt.doctorId,
           doctorName: appt.doctorName,
           targetDate: data.followUpDate,
-          purpose: 'Post-febrile review and platelet count confirmation',
+          purpose: `Clinical review for: ${diagnosisText}`,
           status: 'SCHEDULED',
           createdAt: new Date().toISOString()
         };
         setFollowUps(prev => [newFollowUp, ...prev]);
+      }
+
+      // Create Referral if specified
+      if (data.referral && data.referral.toFacilityId) {
+        const newRef: Referral = {
+          id: 'ref-' + Date.now(),
+          patientId: appt.patientId,
+          patientName: appt.patientName,
+          fromFacilityId: appt.facilityId,
+          fromFacilityName: appt.facilityName,
+          toFacilityId: data.referral.toFacilityId,
+          toFacilityName: data.referral.toFacilityName || 'District Specialty Hospital',
+          referringDoctorId: appt.doctorId,
+          referringDoctorName: appt.doctorName,
+          specialtyRequired: data.referral.specialtyRequired || 'Specialty Care',
+          priority: data.referral.priority || 'Routine',
+          reasonForReferral: data.referral.reason || diagnosisText,
+          clinicalSummary: `Diagnosis: ${diagnosisText}. ${data.clinicalObservations || ''}`,
+          status: 'CREATED',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setReferrals(prev => [newRef, ...prev]);
       }
 
       setAppointments(prev =>
@@ -1194,9 +1325,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
 
+      // Notify Patient
+      addNotification({
+        targetRole: 'PATIENT',
+        targetUserId: appt.patientId,
+        title: 'Consultation Completed & Prescription Issued',
+        message: `Dr. ${appt.doctorName} completed your consultation. Diagnosis: ${diagnosisText}. Prescriptions and lab requisitions are now ready in your portal.`,
+        type: 'PRESCRIPTION_CREATED',
+        relatedEntityId: appointmentId
+      });
+
       addAuditLog(
         'CONSULTATION_COMPLETED',
-        `Doctor ${appt.doctorName} completed consultation for ${appt.patientName}. Diagnosis: ${data.provisionalDiagnosis}`
+        `Doctor ${appt.doctorName} completed consultation for ${appt.patientName}. Diagnosis: ${diagnosisText}`
       );
       playAudioChime('success');
     },
@@ -1806,16 +1947,57 @@ Disclaimer: This explanation is for informational purposes and does not replace 
   const runSarvamVoiceAI = useCallback(
     async (language: Language, audioPrompt?: string): Promise<{ transcript: string; translatedEnglish: string; intake: StructuredIntakeData }> => {
       await new Promise(r => setTimeout(r, 650));
-      let transcript = 'ମୋର ତିନି ଦିନ ହେଲା ଜ୍ୱର ଅଛି ଏବଂ ଶରୀର ଦୁର୍ବଳ ଲାଗୁଛି';
-      let translatedEnglish = 'I have had high fever for the past 3 days and severe body weakness.';
 
-      if (language === 'hi') {
-        transcript = 'मुझे पिछले तीन दिनों से तेज बुखार और बहुत कमजोरी महसूस हो रही है।';
-        translatedEnglish = 'I have had high fever for three days with intense generalized body weakness.';
-      } else if (language === 'mr') {
-        transcript = 'मला गेल्या तीन दिवसांपासून ताप आहे आणि खूप अशक्तपणा जाणवत आहे.';
-        translatedEnglish = 'I have had high fever for the last 3 days along with acute weakness.';
-      }
+      const voiceSamples: Record<Language, { transcript: string; translatedEnglish: string }> = {
+        en: {
+          transcript: 'I have had high fever for the past 3 days and severe body weakness.',
+          translatedEnglish: 'I have had high fever for the past 3 days and severe body weakness.'
+        },
+        or: {
+          transcript: 'ମୋର ତିନି ଦିନ ହେଲା ଜ୍ୱର ଅଛି ଏବଂ ଶରୀର ଦୁର୍ବଳ ଲାଗୁଛି।',
+          translatedEnglish: 'I have had high fever for the past 3 days and severe body weakness.'
+        },
+        hi: {
+          transcript: 'मुझे पिछले तीन दिनों से तेज बुखार और बहुत कमजोरी महसूस हो रही है।',
+          translatedEnglish: 'I have had high fever for three days with intense generalized body weakness.'
+        },
+        mr: {
+          transcript: 'मला गेल्या तीन दिवसांपासून ताप आहे आणि खूप अशक्तपणा जाणवत आहे.',
+          translatedEnglish: 'I have had high fever for the last 3 days along with acute weakness.'
+        },
+        bn: {
+          transcript: 'আমার গত তিন দিন ধরে জ্বর এবং খুব দুর্বল লাগছে।',
+          translatedEnglish: 'I have had fever for the past three days and feeling very weak.'
+        },
+        te: {
+          transcript: 'నాకు గత మూడు రోజులుగా జ్వరం మరియు తీవ్రమైన నీరసంగా ఉంది.',
+          translatedEnglish: 'I have had fever for the past three days and feeling extremely weak.'
+        },
+        ta: {
+          transcript: 'எனக்கு கடந்த மூன்று நாட்களாக காய்ச்சல் மற்றும் மிகுந்த சோர்வாக உள்ளது.',
+          translatedEnglish: 'I have had fever for the past three days and feeling very tired.'
+        },
+        kn: {
+          transcript: 'ನನಗೆ ಕಳೆದ ಮೂರು ದಿನಗಳಿಂದ ಜ್ವರ ಮತ್ತು ತೀವ್ರ ದೌರ್ಬಲ್ಯವಿದೆ.',
+          translatedEnglish: 'I have had fever for the past three days and severe weakness.'
+        },
+        gu: {
+          transcript: 'મને છેલ્લા ત્રણ દિવસથી તાવ અને ખૂબ નબળાઈ આવી રહી છે.',
+          translatedEnglish: 'I have had fever for the past three days and feeling very weak.'
+        },
+        pa: {
+          transcript: 'ਮੈਨੂੰ ਪਿਛਲੇ ਤਿੰਨ ਦਿਨਾਂ ਤੋਂ ਬੁਖਾਰ ਅਤੇ ਬਹੁਤ ਕਮਜ਼ੋਰੀ ਮਹਿਸੂਸ ਹੋ ਰਹੀ ਹੈ।',
+          translatedEnglish: 'I have had fever for the past three days and feeling very weak.'
+        },
+        ml: {
+          transcript: 'എനിക്ക് കഴിഞ്ഞ മൂന്ന് ദിവസമായി പനിയും കടുത്ത ക്ഷീണവും അനുഭവപ്പെടുന്നു.',
+          translatedEnglish: 'I have been having fever and severe fatigue for the past three days.'
+        }
+      };
+
+      const sample = voiceSamples[language] || voiceSamples.en;
+      const transcript = audioPrompt || sample.transcript;
+      const translatedEnglish = sample.translatedEnglish;
 
       const structuredIntake = await runAIIntake(translatedEnglish, language);
       addAuditLog('SARVAM_VOICE_PROCESSED', `Sarvam Indic AI processed speech input in ${language.toUpperCase()}`);
@@ -2153,6 +2335,27 @@ Disclaimer: This explanation is for informational purposes and does not replace 
     playAudioChime('click');
   }, [playAudioChime]);
 
+  const switchRole = useCallback((newRole: UserRole) => {
+    const targetUser = users.find(u => u.role === newRole) || {
+      id: 'usr-' + newRole.toLowerCase(),
+      name: `${newRole.replace(/_/g, ' ')} User`,
+      email: `${newRole.toLowerCase()}@care4u.nexus`,
+      phone: '+91 98000 00000',
+      role: newRole,
+      verificationStatus: 'VERIFIED' as VerificationStatus
+    };
+    setCurrentUser(targetUser);
+    setCurrentUserRole(newRole);
+    setAuthView('DASHBOARD');
+    setActiveRoleTab('dashboard');
+    if (newRole === 'PATIENT') {
+      const p = patients.find(pat => pat.id === targetUser.id || normalizeEmail(pat.email || '') === normalizeEmail(targetUser.email || '')) || patients[0];
+      setActivePatient(p);
+    }
+    playAudioChime('click');
+    addAuditLog('ROLE_SWITCHED', `Switched active view role to ${newRole}`, newRole);
+  }, [users, patients, playAudioChime, addAuditLog]);
+
   // Comprehensive 20-Step Healthcare Diagnostic System Test Suite (/system/health)
   const runSystemSelfTest = useCallback(async (): Promise<SystemTestReport> => {
     setIsTestRunning(true);
@@ -2345,6 +2548,10 @@ Disclaimer: This explanation is for informational purposes and does not replace 
         approveStaffUser,
         activeRoleTab,
         setActiveRoleTab,
+        activePatientTab,
+        setActivePatientTab,
+        voiceSymptomQuery,
+        setVoiceSymptomQuery,
         selectedLanguage,
         setSelectedLanguage,
         isOfflineMode,
@@ -2433,6 +2640,7 @@ Disclaimer: This explanation is for informational purposes and does not replace 
         markAllNotificationsRead,
         syncOfflineData,
         resetDemoData,
+        switchRole,
         playAudioChime,
         triggerConfetti
       }}

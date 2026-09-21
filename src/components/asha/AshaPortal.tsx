@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../services/store';
 import { getTranslation } from '../../i18n/translations';
+import { voiceCommandService } from '../../services/voiceCommandService';
 import {
   UserPlus,
   Mic,
@@ -28,6 +29,8 @@ export const AshaPortal: React.FC = () => {
     bookAppointment,
     facilities,
     doctors,
+    activePatient,
+    requestAmbulance,
     isOfflineMode,
     pendingSyncQueue,
     syncOfflineData,
@@ -49,12 +52,20 @@ export const AshaPortal: React.FC = () => {
   const handleVoiceIntake = () => {
     playAudioChime('click');
     setIsListening(true);
-    const sample =
-      selectedLanguage === 'hi'
-        ? 'मरीज को दो दिन से तेज बुखार, बदन दर्द और कमजोरी है।'
-        : selectedLanguage === 'mr'
-        ? 'रुग्णाला दोन दिवसांपासून तीव्र ताप, अंगदुखी आणि अशक्तपणा आहे.'
-        : 'Patient has high fever, body aches and severe weakness for 2 days.';
+    const samples: Record<string, string> = {
+      hi: 'मरीज को दो दिन से तेज बुखार, बदन दर्द और कमजोरी है।',
+      or: 'ରୋଗୀଙ୍କର ଦୁଇ ଦିନ ହେଲା ପ୍ରବଳ ଜ୍ୱର, ଦେହହାତ ବିନ୍ଧା ଏବଂ ଦୁର୍ବଳତା ଅଛି।',
+      mr: 'रुग्णाला दोन दिवसांपासून तीव्र ताप, अंगदुखी आणि अशक्तपणा आहे.',
+      bn: 'রোগীর দুই দিন ধরে তীব্র জ্বর, গায়ে ব্যথা এবং দুর্বলতা আছে।',
+      te: 'రోగికి రెండు రోజులుగా తీవ్ర జ్వరం, ఒంటి నొప్పులు మరియు నీరసం ఉన్నాయి.',
+      ta: 'நோயாளிக்கு இரண்டு நாட்களாக கடுமையான காய்ச்சல், உடல் வலி மற்றும் சோர்வு உள்ளது.',
+      kn: 'ರೋಗಿಗೆ ಎರಡು ದಿನಗಳಿಂದ ತೀವ್ರ ಜ್ವರ, ಮೈಕೈ ನೋವು ಮತ್ತು ದೌರ್ಬಲ್ಯವಿದೆ.',
+      gu: 'દર્દીને બે દિવસથી તીવ્ર તાવ, શરીરનો દુખાવો અને નબળાઈ છે.',
+      pa: 'ਮਰੀਜ਼ ਨੂੰ ਦੋ ਦਿਨਾਂ ਤੋਂ ਤੇਜ਼ ਬੁਖਾਰ, ਸਰੀਰ ਦਰਦ ਅਤੇ ਕਮਜ਼ੋਰੀ ਹੈ।',
+      ml: 'രോഗിക്ക് രണ്ട് ദിവസമായി കടുത്ത പനിയും ശരീരവേദനയും ക്ഷീണവുമുണ്ട്.',
+      en: 'Patient has high fever, body aches and severe weakness for 2 days.'
+    };
+    const sample = samples[selectedLanguage] || samples.en;
     setTimeout(() => {
       setVoiceQuery(sample);
       setIsListening(false);
@@ -98,6 +109,22 @@ export const AshaPortal: React.FC = () => {
       setStatusMessage('Error registering citizen.');
     }
   };
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'ASHA_ACTION') {
+        if (action.payload === 'REGISTER_CITIZEN') {
+          if (!citizenName.trim()) {
+            setCitizenName('Sunita Majhi');
+          }
+          handleRegisterAndRoute();
+        } else if (action.payload === 'SYNC_OFFLINE') {
+          syncOfflineData();
+        }
+      }
+    });
+    return () => unsub();
+  }, [citizenName, handleRegisterAndRoute, syncOfflineData]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -249,8 +276,18 @@ export const AshaPortal: React.FC = () => {
               Direct emergency bypass to District Trauma Hospital & 108 Ambulance Network.
             </p>
             <button
-              onClick={() => {
-                alert('🚨 Emergency Ambulance 108 Alert Dispatched to Kadegaon Chowk. District Trauma Centre notified.');
+              onClick={async () => {
+                playAudioChime('alert');
+                const targetFac = facilities.find(f => f.emergencyCapability) || facilities[0];
+                const trip = await requestAmbulance(
+                  activePatient?.id || 'pat-rural-1',
+                  citizenVillage || 'Kadegaon Rural Block Ward 3',
+                  targetFac.id,
+                  'Advanced Life Support (ALS)',
+                  'CRITICAL'
+                );
+                setStatusMessage(`🚨 Emergency Ambulance 108 Dispatched! Mission #${trip.id}. Driver: ${trip.driverName}. Pickup OTP: ${trip.otp}. Trauma Emergency team notified.`);
+                triggerConfetti();
               }}
               className="w-full py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition cursor-pointer flex items-center justify-center gap-2"
             >

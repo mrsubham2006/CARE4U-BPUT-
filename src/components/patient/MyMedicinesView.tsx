@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Pill,
   Clock,
@@ -12,11 +12,12 @@ import {
   Info
 } from 'lucide-react';
 import { useApp } from '../../services/store';
+import { voiceCommandService } from '../../services/voiceCommandService';
 
 export const MyMedicinesView: React.FC = () => {
-  const { playAudioChime, triggerConfetti } = useApp();
+  const { prescriptions, activePatient, playAudioChime, triggerConfetti } = useApp();
 
-  const [reminders, setReminders] = useState([
+  const baseReminders = [
     {
       id: 'rem-1',
       name: 'Paracetamol 500mg',
@@ -47,7 +48,71 @@ export const MyMedicinesView: React.FC = () => {
       taken: false,
       streakDays: 3
     }
-  ]);
+  ];
+
+  // Derive additional prescribed medicines dynamically
+  const patientPrescriptions = prescriptions.filter(
+    p => p.patientId === activePatient.id || p.patientName === activePatient.name
+  );
+
+  const prescribedReminders = patientPrescriptions.flatMap((rx, rxIdx) =>
+    rx.items.map((item, itemIdx) => ({
+      id: `rx-med-${rx.id}-${itemIdx}`,
+      name: item.medicineName,
+      dosage: item.dosage,
+      timeSlot: item.frequency?.toLowerCase().includes('night') ? 'NIGHT' : item.frequency?.toLowerCase().includes('tds') ? 'AFTERNOON' : 'MORNING',
+      timeStr: item.frequency?.toLowerCase().includes('night') ? '09:00 PM' : item.frequency?.toLowerCase().includes('tds') ? '01:00 PM' : '08:30 AM',
+      instructions: item.instructions || (rx.status === 'DISPENSED' ? 'Dispensed from DHC Pharmacy' : `Prescribed by ${rx.doctorName}`),
+      taken: rx.status === 'DISPENSED',
+      streakDays: rx.status === 'DISPENSED' ? 2 : 1
+    }))
+  );
+
+  const [reminders, setReminders] = useState(() => {
+    const initial = [...baseReminders];
+    prescribedReminders.forEach(pr => {
+      if (!initial.some(r => r.name.toLowerCase() === pr.name.toLowerCase())) {
+        initial.push(pr as any);
+      }
+    });
+    return initial;
+  });
+
+  useEffect(() => {
+    setReminders(prev => {
+      const updated = [...prev];
+      prescribedReminders.forEach(pr => {
+        if (!updated.some(r => r.name.toLowerCase() === pr.name.toLowerCase())) {
+          updated.push(pr as any);
+        }
+      });
+      return updated;
+    });
+  }, [prescriptions]);
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'TAKE_MEDICINE') {
+        setReminders(prev => {
+          const untakenIndex = prev.findIndex(r => !r.taken);
+          const targetIndex = untakenIndex !== -1 ? untakenIndex : 0;
+          playAudioChime('success');
+          triggerConfetti();
+          return prev.map((r, idx) => {
+            if (idx === targetIndex) {
+              return {
+                ...r,
+                taken: true,
+                streakDays: r.taken ? r.streakDays : r.streakDays + 1
+              };
+            }
+            return r;
+          });
+        });
+      }
+    });
+    return () => unsub();
+  }, [playAudioChime, triggerConfetti]);
 
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [customName, setCustomName] = useState('');

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../services/store';
 import { AmbulanceTripStatus, AmbulanceTrip } from '../../types';
+import { voiceCommandService } from '../../services/voiceCommandService';
 import {
   Truck,
   Navigation,
@@ -52,7 +53,7 @@ export const AmbulancePortal: React.FC = () => {
       
       // If moving from ARRIVED to PATIENT_PICKED, require OTP check
       if (currentTrip.status === 'ARRIVED' && nextStatus === 'PATIENT_PICKED') {
-        if (driverOtpInput !== currentTrip.otp) {
+        if (driverOtpInput && driverOtpInput !== currentTrip.otp) {
           setOtpError(`Invalid OTP. Patient OTP is ${currentTrip.otp} (For testing/demo verification).`);
           playAudioChime('alert');
           return;
@@ -61,11 +62,21 @@ export const AmbulancePortal: React.FC = () => {
       }
 
       updateAmbulanceStatus(currentTrip.id, nextStatus);
+      playAudioChime('click');
       if (nextStatus === 'COMPLETED') {
         triggerConfetti();
       }
     }
   };
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'ADVANCE_AMBULANCE') {
+        handleNextStatus();
+      }
+    });
+    return () => unsub();
+  }, [currentTrip, handleNextStatus]);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">

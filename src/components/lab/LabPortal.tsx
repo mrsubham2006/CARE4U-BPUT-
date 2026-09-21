@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../services/store';
+import { voiceCommandService } from '../../services/voiceCommandService';
 import {
   FlaskConical,
   Clock,
@@ -27,7 +28,28 @@ export const LabPortal: React.FC = () => {
   const handleProgressStatus = (orderId: string, nextStatus: any) => {
     playAudioChime('click');
     updateLabOrderStatus(orderId, nextStatus);
+    if (nextStatus === 'REPORT_READY') {
+      triggerConfetti();
+    }
   };
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'ADVANCE_LAB_ORDER') {
+        const targetOrder = labOrders.find(o => o.status !== 'REPORT_READY') || selectedOrder;
+        if (targetOrder) {
+          const next =
+            targetOrder.status === 'ORDERED'
+              ? 'SAMPLE_COLLECTED'
+              : targetOrder.status === 'SAMPLE_COLLECTED'
+              ? 'PROCESSING'
+              : 'REPORT_READY';
+          handleProgressStatus(targetOrder.id, next);
+        }
+      }
+    });
+    return () => unsub();
+  }, [labOrders, selectedOrder]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">

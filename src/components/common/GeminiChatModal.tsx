@@ -14,25 +14,45 @@ import {
   Pill,
   ShieldCheck,
   AlertTriangle,
-  ChevronDown
+  ArrowRight,
+  Compass,
+  Building2,
+  Calendar,
+  Layers,
+  HeartPulse
 } from 'lucide-react';
 import { callGeminiChat, callGeminiTranscribe, GeminiModelChoice, ChatMessage } from '../../services/geminiService';
+import { useApp } from '../../services/store';
+import { voiceCommandService } from '../../services/voiceCommandService';
+import { getWebsiteKnowledgeAnswer, CARE4U_SYSTEM_PROMPT, WebsiteActionTag } from '../../services/websiteKnowledgeService';
+
+export interface ChatMessageWithActions extends ChatMessage {
+  actions?: WebsiteActionTag[];
+  isFallback?: boolean;
+}
 
 interface GeminiChatModalProps {
   isOpen: boolean;
   onClose: () => void;
-  initialRole?: 'TRIAGE' | 'PHARMACY' | 'ABDM' | 'EMERGENCY';
+  initialRole?: 'PLATFORM_GUIDE' | 'TRIAGE' | 'PHARMACY' | 'ABDM' | 'EMERGENCY';
+  initialQuery?: string;
 }
 
 const ROLES_CONFIG = {
+  PLATFORM_GUIDE: {
+    title: 'CARE4U Copilot & Guide',
+    icon: <Compass className="w-4 h-4 text-teal-400" />,
+    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+    systemInstruction: CARE4U_SYSTEM_PROMPT
+  },
   TRIAGE: {
     title: 'Clinical Triage Doctor',
-    icon: <Stethoscope className="w-4 h-4 text-teal-400" />,
-    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+    icon: <Stethoscope className="w-4 h-4 text-emerald-400" />,
+    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
     systemInstruction: `You are CARE4U Clinical Triage Doctor AI. Analyze user symptoms, categorize severity (Green/Yellow/Red-Flag), provide differential explanations, home care advice, and recommend whether to visit a Primary Health Centre (PHC) or District Hospital.`
   },
   PHARMACY: {
-    title: 'Pharmacist & Drug Safety Specialist',
+    title: 'Pharmacist & Drug Safety',
     icon: <Pill className="w-4 h-4 text-amber-400" />,
     badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
     systemInstruction: `You are CARE4U Drug & Pharmacy Safety AI. Explain medication dosages, drug-drug interactions, common side effects, storage guidelines, and generic alternatives available under PMBJP (Jan Aushadhi) schemes in India.`
@@ -54,17 +74,29 @@ const ROLES_CONFIG = {
 export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
   isOpen,
   onClose,
-  initialRole = 'TRIAGE'
+  initialRole = 'PLATFORM_GUIDE',
+  initialQuery
 }) => {
-  const [activeRoleKey, setActiveRoleKey] = useState<'TRIAGE' | 'PHARMACY' | 'ABDM' | 'EMERGENCY'>(initialRole);
+  const { selectedLanguage } = useApp();
+
+  const [activeRoleKey, setActiveRoleKey] = useState<'PLATFORM_GUIDE' | 'TRIAGE' | 'PHARMACY' | 'ABDM' | 'EMERGENCY'>(initialRole);
   const [selectedModel, setSelectedModel] = useState<GeminiModelChoice>('gemini-3.5-flash');
   const [inputMessage, setInputMessage] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([
+  const [messages, setMessages] = useState<ChatMessageWithActions[]>([
     {
       role: 'assistant',
-      content: `Hello! I am your **CARE4U NEXUS AI Healthcare Assistant**. How can I assist you with clinical triage, medication guidance, or healthcare coordination today?`
+      content: `Hello! I am your **CARE4U NEXUS AI Copilot & Healthcare Guide**.
+I know this entire platform inside and out. Ask me anything about appointments, medicine schedules, the 8 user portals, emergency ambulance dispatch, or voice commands!`,
+      actions: [
+        { type: 'NAVIGATE_TAB', payload: 'AI_INTAKE', label: '✨ AI Symptom Intake' },
+        { type: 'NAVIGATE_TAB', payload: 'MY_APPOINTMENTS', label: '📅 Consultations' },
+        { type: 'NAVIGATE_TAB', payload: 'MEDICINES_SCHEDULE', label: '💊 Medicine Schedule' },
+        { type: 'TRIGGER_SOS', label: '🚨 Emergency 108 SOS' },
+        { type: 'SWITCH_ROLE', payload: 'DOCTOR', label: '🩺 Doctor Portal' }
+      ]
     }
   ]);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -73,6 +105,7 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const hasSentInitialRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -80,31 +113,174 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
     }
   }, [messages, isOpen]);
 
+  useEffect(() => {
+    if (isOpen && initialQuery && hasSentInitialRef.current !== initialQuery) {
+      hasSentInitialRef.current = initialQuery;
+      handleSendMessage(initialQuery);
+    }
+  }, [isOpen, initialQuery]);
+
   const currentRole = ROLES_CONFIG[activeRoleKey];
+
+  const handleExecuteAction = (action: WebsiteActionTag) => {
+    if (action.type === 'NAVIGATE_TAB') {
+      voiceCommandService.dispatchAction({
+        type: 'NAVIGATE_TAB',
+        payload: action.payload,
+        label: action.label,
+        feedbackText: {
+          en: `Navigating to ${action.label}`,
+          hi: 'नेविगेट किया जा रहा है',
+          or: 'ଯାଉଛି',
+          mr: 'जात आहे',
+          bn: 'যাওয়া হচ্ছে',
+          te: 'వెళ్తోంది',
+          ta: 'செல்கிறது',
+          kn: 'ಹೋಗುತ್ತಿದೆ',
+          gu: 'જઈ રહ્યા છીએ',
+          pa: 'ਜਾ ਰਹੇ ਹਾਂ',
+          ml: 'പോകുന്നു'
+        }
+      });
+      onClose();
+    } else if (action.type === 'SWITCH_ROLE') {
+      voiceCommandService.dispatchAction({
+        type: 'SWITCH_ROLE',
+        payload: action.payload as any,
+        label: action.label,
+        feedbackText: {
+          en: `Switching workspace to ${action.label}`,
+          hi: 'पोर्टल बदला जा रहा है',
+          or: 'ପୋର୍ଟାଲ୍ ବଦଳାଯାଉଛି',
+          mr: 'पोर्टल बदलत आहे',
+          bn: 'পোর্টাল পরিবর্তন করা হচ্ছে',
+          te: 'పోర్టల్ మారుతోంది',
+          ta: 'போர்டல் மாறுகிறது',
+          kn: 'ಪೋರ್ಟಲ್ ಬದಲಾಯಿಸಲಾಗುತ್ತಿದೆ',
+          gu: 'પોર્ટલ બદલાઈ રહ્યું છે',
+          pa: 'ਪੋਰਟਲ ਬਦਲਿਆ ਜਾ ਰਿਹਾ ਹੈ',
+          ml: 'പോർട്ടൽ മാറുന്നു'
+        }
+      });
+      onClose();
+    } else if (action.type === 'TRIGGER_SOS') {
+      voiceCommandService.dispatchAction({
+        type: 'TRIGGER_EMERGENCY_SOS',
+        label: '108 Emergency Ambulance',
+        feedbackText: {
+          en: '108 Emergency ambulance dispatch initiated.',
+          hi: '108 आपातकालीन सेवा',
+          or: '୧୦୮ ଜରୁରୀକାଳୀନ ସେବା',
+          mr: '१०८ आपत्कालीन सेवा',
+          bn: '১০৮ জরুরি সেবা',
+          te: '108 అత్యవసర సేవ',
+          ta: '108 அவசர சேவை',
+          kn: '108 ತುರ್ತು ಸೇವೆ',
+          gu: '108 કટોકટી સેવા',
+          pa: '108 ਐਮਰਜੈਂਸੀ ਸੇਵਾ',
+          ml: '108 അടിയന്തര സേവനം'
+        }
+      });
+      onClose();
+    } else if (action.type === 'OPEN_TOUR') {
+      voiceCommandService.dispatchAction({
+        type: 'OPEN_MODAL',
+        payload: 'TOUR',
+        label: 'Platform Tour',
+        feedbackText: {
+          en: 'Opening Interactive Tour Guide',
+          hi: 'टूर गाइड खोला जा रहा है',
+          or: 'ଇଣ୍ଟରାକ୍ଟିଭ୍ ଗାଇଡ୍ ଖୋଲାଯାଉଛି',
+          mr: 'मार्गदर्शक सुरू केला आहे',
+          bn: 'ট্যুর গাইড',
+          te: 'టూర్ గైడ్',
+          ta: 'டூர் கைடு',
+          kn: 'ಟೂರ್ ಗೈಡ್',
+          gu: 'ટૂર માર્ગદર્શિકા',
+          pa: 'ਟੂਰ ਗਾਈਡ',
+          ml: 'ടൂർ ഗൈഡ്'
+        }
+      });
+      onClose();
+    } else if (action.type === 'OPEN_SYSTEM_TEST') {
+      voiceCommandService.dispatchAction({
+        type: 'OPEN_MODAL',
+        payload: 'SYSTEM_TEST',
+        label: 'System Diagnostic',
+        feedbackText: {
+          en: 'Running 20-Point System Diagnostics',
+          hi: 'सिस्टम डायग्नोस्टिक शुरू',
+          or: 'ସିଷ୍ଟମ୍ ନିଦାନ ଆରମ୍ଭ',
+          mr: 'प्रणाली चाचणी सुरू',
+          bn: 'সিস্টেম পরীক্ষা',
+          te: 'సిస్టమ్ పరీక్ష',
+          ta: 'கணினி சோதனை',
+          kn: 'ಸಿಸ್ಟಮ್ ಪರೀಕ್ಷೆ',
+          gu: 'સિસ્ટમ તપાસ',
+          pa: 'ਸਿਸਟਮ ਜਾਂਚ',
+          ml: 'സിസ്റ്റം പരിശോധന'
+        }
+      });
+      onClose();
+    } else if (action.type === 'SET_LANGUAGE') {
+      voiceCommandService.dispatchAction({
+        type: 'SET_LANGUAGE',
+        payload: action.payload,
+        label: action.label,
+        feedbackText: {
+          en: `Language changed to ${action.label}`,
+          hi: 'भाषा बदल दी गई',
+          or: 'ଭାଷା ବଦଳାଗଲା',
+          mr: 'भाषा बदलली',
+          bn: 'ভাষা পরিবর্তন করা হয়েছে',
+          te: 'భాష మార్చబడింది',
+          ta: 'மொழி மாற்றப்பட்டது',
+          kn: 'ಭಾಷೆ ಬದಲಾಯಿಸಲಾಗಿದೆ',
+          gu: 'ભાષા બદલાઈ',
+          pa: 'ਭਾਸ਼ਾ ਬਦਲੀ ਗਈ',
+          ml: 'ഭാഷ മാറ്റി'
+        }
+      });
+    }
+  };
 
   const handleSendMessage = async (customPrompt?: string) => {
     const textToSend = customPrompt || inputMessage.trim();
     if (!textToSend || isLoading) return;
 
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content: textToSend }];
+    const newMessages: ChatMessageWithActions[] = [...messages, { role: 'user', content: textToSend }];
     setMessages(newMessages);
     setInputMessage('');
     setIsLoading(true);
 
+    // 1. Try Gemini API First
     try {
       const res = await callGeminiChat(
-        newMessages,
+        newMessages.map(({ role, content }) => ({ role, content })),
         currentRole.systemInstruction,
         selectedModel
       );
 
-      setMessages((prev) => [...prev, { role: 'assistant', content: res.reply }]);
-    } catch (err: any) {
+      // Check if query is also related to platform features so we can offer direct buttons
+      const knowledge = getWebsiteKnowledgeAnswer(textToSend, selectedLanguage);
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: `⚠️ **AI Service Notice**: ${err.message || 'Unable to connect to Gemini API. Please ensure your GEMINI_API_KEY is configured in Settings.'}`
+          content: res.reply,
+          actions: knowledge.suggestedActions
+        }
+      ]);
+    } catch (err: any) {
+      // 2. Intelligent Resilient Fallback to Built-in CARE4U Website Knowledge Engine
+      const knowledge = getWebsiteKnowledgeAnswer(textToSend, selectedLanguage);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: knowledge.reply,
+          actions: knowledge.suggestedActions,
+          isFallback: true
         }
       ]);
     } finally {
@@ -170,7 +346,14 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
     setMessages([
       {
         role: 'assistant',
-        content: `Conversation reset. Switched to **${currentRole.title}** powered by \`${selectedModel}\`. How can I help you?`
+        content: `Conversation reset. Switched to **${currentRole.title}** powered by \`${selectedModel}\`. How can I help you?`,
+        actions: [
+          { type: 'NAVIGATE_TAB', payload: 'AI_INTAKE', label: '✨ AI Symptom Intake' },
+          { type: 'NAVIGATE_TAB', payload: 'MY_APPOINTMENTS', label: '📅 Consultations' },
+          { type: 'NAVIGATE_TAB', payload: 'MEDICINES_SCHEDULE', label: '💊 Medicine Schedule' },
+          { type: 'TRIGGER_SOS', label: '🚨 Emergency 108 SOS' },
+          { type: 'SWITCH_ROLE', payload: 'DOCTOR', label: '🩺 Doctor Portal' }
+        ]
       }
     ]);
   };
@@ -179,21 +362,23 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl h-[88vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:px-6 py-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-950/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 border border-teal-500/30 flex items-center justify-center shadow-lg shadow-teal-500/10">
               <Sparkles className="w-5 h-5 text-teal-400" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white font-display">Gemini Healthcare Assistant</h3>
+                <h3 className="text-base font-bold text-white font-display">CARE4U NEXUS AI Copilot</h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${currentRole.badgeColor}`}>
                   {currentRole.title}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Multi-turn medical intelligence & coordination</p>
+              <p className="text-[11px] text-slate-400">
+                Official Platform Navigator & Clinical Intelligence Copilot
+              </p>
             </div>
           </div>
 
@@ -230,7 +415,7 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
 
         {/* Specialized Roles Bar */}
         <div className="px-4 sm:px-6 py-2 bg-slate-950/40 border-b border-slate-800/80 flex items-center gap-2 overflow-x-auto text-xs no-scrollbar">
-          <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider shrink-0 font-mono">Role:</span>
+          <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wider shrink-0 font-mono">Expertise:</span>
           {(Object.keys(ROLES_CONFIG) as (keyof typeof ROLES_CONFIG)[]).map((key) => {
             const role = ROLES_CONFIG[key];
             const isActive = activeRoleKey === key;
@@ -243,14 +428,14 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
                     ...prev,
                     {
                       role: 'assistant',
-                      content: `Switched mode to **${role.title}**. ${role.systemInstruction.slice(0, 100)}...`
+                      content: `Mode switched to **${role.title}**. Ask me any question related to this area!`
                     }
                   ]);
                 }}
-                className={`px-3 py-1 rounded-xl font-medium transition cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                className={`px-3 py-1 rounded-xl text-xs font-semibold shrink-0 transition flex items-center gap-1.5 cursor-pointer ${
                   isActive
-                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
-                    : 'bg-slate-800/60 text-slate-400 hover:text-white border border-transparent'
+                    ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm'
+                    : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border border-slate-800'
                 }`}
               >
                 {role.icon}
@@ -267,7 +452,7 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
             return (
               <div
                 key={idx}
-                className={`flex gap-3 max-w-[90%] sm:max-w-[80%] ${
+                className={`flex gap-3 max-w-[95%] sm:max-w-[85%] ${
                   isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'
                 }`}
               >
@@ -290,6 +475,22 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
                 >
                   <div className="whitespace-pre-wrap">{m.content}</div>
 
+                  {/* Interactive Action Navigation Buttons */}
+                  {m.actions && m.actions.length > 0 && (
+                    <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex flex-wrap gap-2">
+                      {m.actions.map((act, aIdx) => (
+                        <button
+                          key={aIdx}
+                          onClick={() => handleExecuteAction(act)}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-teal-950/80 to-slate-900 hover:from-teal-900/90 hover:to-slate-800 border border-teal-500/40 hover:border-teal-400 text-teal-200 hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95 group"
+                        >
+                          <span>{act.label}</span>
+                          <ArrowRight className="w-3 h-3 text-teal-400 group-hover:translate-x-0.5 transition" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   {!isUser && (
                     <button
                       onClick={() => copyMessage(m.content, idx)}
@@ -311,7 +512,7 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
               </div>
               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-slate-400 rounded-tl-none flex items-center gap-2 text-xs">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-teal-400" />
-                <span>Gemini is generating clinical reasoning response...</span>
+                <span>AI Copilot is analyzing and retrieving platform guidance...</span>
               </div>
             </div>
           )}
@@ -323,27 +524,45 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
         <div className="px-4 sm:px-6 py-2 bg-slate-950/40 border-t border-slate-800/80 flex items-center gap-2 overflow-x-auto text-[11px] no-scrollbar">
           <span className="text-slate-500 font-mono">Suggested:</span>
           <button
-            onClick={() => handleSendMessage('What are emergency red-flag symptoms for acute chest pain or fever in kids?')}
-            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0"
+            onClick={() => handleSendMessage('How do I book an appointment on this website?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0 cursor-pointer"
           >
-            🚨 Emergency Red Flags
+            📅 How to book appointment
           </button>
           <button
-            onClick={() => handleSendMessage('How do I link and view my health records with ABDM ABHA ID?')}
-            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0"
+            onClick={() => handleSendMessage('Where is my medicine schedule and how do I mark it as taken?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0 cursor-pointer"
           >
-            🪪 ABDM ABHA ID Link
+            💊 Medicine schedule guide
           </button>
           <button
-            onClick={() => handleSendMessage('Check drug interactions between Paracetamol and Ibuprofen.')}
-            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0"
+            onClick={() => handleSendMessage('How does the Doctor Clinician Portal work?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0 cursor-pointer"
           >
-            💊 Drug Interactions
+            🩺 Doctor Portal
+          </button>
+          <button
+            onClick={() => handleSendMessage('What does the ASHA Field Worker portal do?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0 cursor-pointer"
+          >
+            🌾 ASHA Portal
+          </button>
+          <button
+            onClick={() => handleSendMessage('How do I use voice commands in Odia or Hindi?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition shrink-0 cursor-pointer"
+          >
+            🎙️ Voice commands help
+          </button>
+          <button
+            onClick={() => handleSendMessage('How do I call a 108 emergency ambulance?')}
+            className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-rose-300 border border-rose-500/30 transition shrink-0 cursor-pointer"
+          >
+            🚨 108 Emergency SOS
           </button>
         </div>
 
         {/* Input Bar */}
-        <div className="p-3 sm:p-4 bg-slate-950 border-t border-slate-800">
+        <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-950/80">
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -351,44 +570,50 @@ export const GeminiChatModal: React.FC<GeminiChatModalProps> = ({
             }}
             className="flex items-center gap-2"
           >
-            <button
-              type="button"
-              onClick={handleToggleVoiceRecord}
-              disabled={isLoading || isTranscribing}
-              title={isRecording ? 'Stop recording' : 'Speak using Gemini 3.5 Transcribe'}
-              className={`p-3 rounded-2xl transition cursor-pointer flex items-center justify-center ${
-                isRecording
-                  ? 'bg-rose-500 text-white animate-pulse shadow-lg'
-                  : 'bg-slate-800 hover:bg-slate-700 text-teal-400'
-              }`}
-            >
-              {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </button>
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder={
+                  isRecording
+                    ? 'Listening to audio note...'
+                    : isTranscribing
+                    ? 'Transcribing speech with AI...'
+                    : `Ask CARE4U Copilot about features, workflows, or medical triage...`
+                }
+                disabled={isLoading || isRecording || isTranscribing}
+                className="w-full bg-slate-900 border border-slate-800 focus:border-teal-400 rounded-2xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none pr-12"
+              />
 
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={
-                isTranscribing
-                  ? 'Transcribing voice input...'
-                  : isRecording
-                  ? 'Listening... Click mic to stop.'
-                  : `Ask ${currentRole.title} (${selectedModel})...`
-              }
-              disabled={isLoading || isRecording}
-              className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3 text-xs sm:text-sm text-white focus:outline-none focus:border-teal-400 transition"
-            />
+              <button
+                type="button"
+                onClick={handleToggleVoiceRecord}
+                disabled={isLoading || isTranscribing}
+                title={isRecording ? 'Stop Recording' : 'Speak to AI'}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-xl transition cursor-pointer ${
+                  isRecording
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
+                    : 'text-slate-400 hover:text-teal-400'
+                }`}
+              >
+                {isRecording ? <MicOff className="w-4 h-4 text-red-400" /> : <Mic className="w-4 h-4" />}
+              </button>
+            </div>
 
             <button
               type="submit"
-              disabled={!inputMessage.trim() || isLoading || isRecording}
-              className="px-5 py-3 rounded-2xl bg-gradient-to-r from-teal-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-slate-950 font-bold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-teal-500/20 transition cursor-pointer disabled:opacity-40"
+              disabled={isLoading || !inputMessage.trim()}
+              className="p-3 sm:px-5 sm:py-3 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-400 hover:to-cyan-500 text-slate-950 rounded-2xl font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-lg shadow-teal-500/20"
             >
-              <span>Send</span>
               <Send className="w-4 h-4" />
+              <span className="hidden sm:inline text-xs">Send</span>
             </button>
           </form>
+
+          <p className="text-[10px] text-slate-500 text-center mt-2 font-mono">
+            Powered by Gemini AI • CARE4U Platform Intelligence • ABDM FHIR Standards
+          </p>
         </div>
       </div>
     </div>

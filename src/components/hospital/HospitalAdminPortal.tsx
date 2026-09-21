@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../services/store';
 import {
   Building2,
@@ -14,7 +14,11 @@ import {
   Sliders,
   Zap,
   Radio,
-  Flame
+  Flame,
+  Truck,
+  MapPin,
+  Clock,
+  Navigation
 } from 'lucide-react';
 
 export const HospitalAdminPortal: React.FC = () => {
@@ -22,15 +26,27 @@ export const HospitalAdminPortal: React.FC = () => {
     facilities,
     doctors,
     appointments,
+    ambulanceTrips,
     updateFacilityCapacity,
     toggleDoctorAvailability,
     playAudioChime,
     triggerConfetti
   } = useApp();
 
-  // Active facility: District Health Centre (DHC)
-  const currentFac = facilities.find(f => f.id === 'fac-1') || facilities[0];
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string>('fac-1');
+  const currentFac = facilities.find(f => f.id === selectedFacilityId) || facilities[0];
   const facDoctors = doctors.filter(d => d.facilityId === currentFac.id);
+
+  // Inbound Ambulances destined for this facility
+  const inboundAmbulances = ambulanceTrips.filter(
+    t => (t.destinationFacilityId === currentFac.id || t.destinationFacilityName === currentFac.name) &&
+         t.status !== 'COMPLETED'
+  );
+
+  // Appointments registered for this facility
+  const facAppointments = appointments.filter(
+    a => a.facilityId === currentFac.id || a.facilityName === currentFac.name
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -56,7 +72,23 @@ export const HospitalAdminPortal: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Facility Selector Dropdown */}
+          <select
+            value={currentFac.id}
+            onChange={e => {
+              playAudioChime('click');
+              setSelectedFacilityId(e.target.value);
+            }}
+            className="bg-slate-900 border border-indigo-500/40 rounded-xl px-3 py-1.5 text-xs text-indigo-200 font-semibold focus:outline-none focus:border-indigo-400 cursor-pointer"
+          >
+            {facilities.map(f => (
+              <option key={f.id} value={f.id} className="bg-slate-950 text-white">
+                {f.name} ({f.type})
+              </option>
+            ))}
+          </select>
+
           <span
             className={`px-3 py-1 rounded-full text-xs font-mono font-bold border ${
               currentFac.statusColor === 'GREEN'
@@ -249,6 +281,125 @@ export const HospitalAdminPortal: React.FC = () => {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Cross-Panel Telemetry: Inbound Ambulances & Facility Appointments */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Inbound Emergency Dispatches */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-rose-300 text-xs font-bold uppercase tracking-wider font-mono">
+              <Truck className="w-4 h-4 text-rose-400" />
+              <span>Inbound Emergency Dispatches (EMS-108)</span>
+            </div>
+            <span className="text-xs font-mono text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-lg border border-rose-500/20">
+              {inboundAmbulances.length} Active
+            </span>
+          </div>
+
+          {inboundAmbulances.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-xs rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1">
+              <Truck className="w-6 h-6 mx-auto text-slate-600" />
+              <p className="font-semibold text-slate-400">No inbound ambulance dispatches</p>
+              <p className="text-[11px] text-slate-500">
+                Emergency dispatches routed to {currentFac.name} will stream here live.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {inboundAmbulances.map(trip => (
+                <div
+                  key={trip.id}
+                  className="p-4 rounded-2xl bg-slate-950 border border-rose-500/30 space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{trip.vehicleNumber}</span>
+                      <span className="text-slate-400 font-mono text-[11px]">ID: {trip.id}</span>
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                      {trip.status}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-400 pt-1 border-t border-slate-900">
+                    <div>
+                      Patient: <strong className="text-slate-200">{trip.patientName || 'Emergency Patient'}</strong>
+                    </div>
+                    <div>
+                      Operator: <strong className="text-slate-200">{trip.driverName}</strong>
+                    </div>
+                    <div>
+                      Pickup: <span className="text-slate-300">{trip.pickupAddress || 'Site Location'}</span>
+                    </div>
+                    <div>
+                      ETA: <strong className="text-teal-300 font-mono">{trip.etaMinutes} mins</strong>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Facility OPD & Scheduled Visits Queue */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-teal-300 text-xs font-bold uppercase tracking-wider font-mono">
+              <Clock className="w-4 h-4" />
+              <span>Facility OPD & Scheduled Visits ({facAppointments.length})</span>
+            </div>
+            <span className="text-xs font-mono text-teal-400">
+              {facAppointments.filter(a => a.status === 'CHECKED_IN').length} Checked In
+            </span>
+          </div>
+
+          {facAppointments.length === 0 ? (
+            <div className="p-8 text-center text-slate-500 text-xs rounded-2xl bg-slate-950 border border-slate-800/80 space-y-1">
+              <Clock className="w-6 h-6 mx-auto text-slate-600" />
+              <p className="font-semibold text-slate-400">No visits currently scheduled for this facility</p>
+              <p className="text-[11px] text-slate-500">
+                Patient bookings and ASHA field referrals will populate this queue.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+              {facAppointments.map(apt => (
+                <div
+                  key={apt.id}
+                  className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-3 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-white text-sm">{apt.patientName}</span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                        Token #{apt.token?.tokenNumber || 'APT'}
+                      </span>
+                    </div>
+                    <div className="text-slate-400 text-[11px] mt-0.5">
+                      Doctor: {apt.doctorName} • Slot: {apt.scheduledTime || '10:00 AM'}
+                    </div>
+                    <div className="text-slate-400 text-[10px] mt-0.5">
+                      Symptoms: <span className="text-slate-300">{apt.symptomsSummary || 'Consultation'}</span>
+                    </div>
+                  </div>
+
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold border shrink-0 ${
+                      apt.status === 'COMPLETED' || apt.status === 'CONSULTATION_COMPLETED'
+                        ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-300'
+                        : apt.status === 'CHECKED_IN'
+                        ? 'bg-amber-950/80 border-amber-500/40 text-amber-300'
+                        : 'bg-slate-800 border-slate-700 text-slate-300'
+                    }`}
+                  >
+                    {apt.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

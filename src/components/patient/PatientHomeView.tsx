@@ -22,7 +22,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { useApp } from '../../services/store';
-import { translations } from '../../i18n/translations';
+import { getTranslation } from '../../i18n/translations';
 
 interface PatientHomeViewProps {
   onNavigate: (tab: any) => void;
@@ -53,7 +53,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
     activeToken
   } = useApp();
 
-  const t = (translations as any)[selectedLanguage] || translations.en;
+  const t = getTranslation(selectedLanguage);
 
   const myAppointments = appointments.filter(a => a.patientId === activePatient.id || a.patientName === activePatient.name);
   const upcomingAppointment = myAppointments.find(
@@ -118,14 +118,14 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
               className="flex items-center gap-2.5 px-5 py-3 rounded-xl bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 text-white font-bold text-sm shadow-lg shadow-red-900/40 border border-red-400/30 transition-all transform hover:scale-[1.02] active:scale-[0.98]"
             >
               <AlertTriangle className="w-4 h-4 animate-bounce" />
-              <span>108 Emergency SOS</span>
+              <span>{t.emergencySosButton}</span>
             </button>
             <button
               onClick={() => onNavigate('QR_ID')}
               className="flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-800/80 hover:bg-slate-750 text-slate-200 border border-slate-700 text-sm font-medium transition-all"
             >
               <QrCode className="w-4 h-4 text-teal-400" />
-              <span>Health QR ID</span>
+              <span>{t.healthQrId}</span>
             </button>
           </div>
         </div>
@@ -137,7 +137,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
               {profileCompletionPercent}%
             </div>
             <div>
-              <div className="text-xs font-semibold text-white">Profile Completion Status</div>
+              <div className="text-xs font-semibold text-white">{t.profileCompletion}</div>
               <div className="text-[11px] text-slate-400">
                 {profileCompletionPercent === 100
                   ? 'All health identity and emergency contacts verified'
@@ -167,7 +167,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
       <div className="space-y-3">
         <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-teal-400" />
-          <span>Care Actions & Services</span>
+          <span>{t.careActions}</span>
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
           <button
@@ -177,7 +177,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 text-teal-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Search className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-teal-300 leading-tight">Find a Doctor</span>
+            <span className="text-xs font-semibold text-white group-hover:text-teal-300 leading-tight">{t.findDoctor}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Specialists & clinics</span>
           </button>
 
@@ -188,7 +188,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 text-blue-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Calendar className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-blue-300 leading-tight">Book Slot</span>
+            <span className="text-xs font-semibold text-white group-hover:text-blue-300 leading-tight">{t.bookSlot}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Real-time OPD</span>
           </button>
 
@@ -199,7 +199,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 text-purple-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Video className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-purple-300 leading-tight">Teleconsult</span>
+            <span className="text-xs font-semibold text-white group-hover:text-purple-300 leading-tight">{t.videoConsult}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Video room</span>
           </button>
 
@@ -210,7 +210,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Stethoscope className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-emerald-300 leading-tight">AI Intake</span>
+            <span className="text-xs font-semibold text-white group-hover:text-emerald-300 leading-tight">{t.navAIIntake}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Voice & symptoms</span>
           </button>
 
@@ -221,7 +221,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Pill className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-amber-300 leading-tight">Scan Rx</span>
+            <span className="text-xs font-semibold text-white group-hover:text-amber-300 leading-tight">{t.navPrescriptions}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Document AI OCR</span>
           </button>
 
@@ -232,7 +232,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-cyan-500/10 group-hover:bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Upload className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-cyan-300 leading-tight">Health Wallet</span>
+            <span className="text-xs font-semibold text-white group-hover:text-cyan-300 leading-tight">{t.navHealthWallet}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Upload records</span>
           </button>
 
@@ -243,7 +243,7 @@ export const PatientHomeView: React.FC<PatientHomeViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-indigo-500/10 group-hover:bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-2 transition-transform group-hover:scale-110">
               <Building2 className="w-5 h-5" />
             </div>
-            <span className="text-xs font-semibold text-white group-hover:text-indigo-300 leading-tight">MedRoute AI</span>
+            <span className="text-xs font-semibold text-white group-hover:text-indigo-300 leading-tight">{t.medRouteTitle}</span>
             <span className="text-[10px] text-slate-400 mt-0.5">Smart facility load</span>
           </button>
         </div>

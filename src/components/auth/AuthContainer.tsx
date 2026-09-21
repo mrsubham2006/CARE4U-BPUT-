@@ -32,6 +32,7 @@ import {
   normalizeIndianPhone,
   validatePassword
 } from '../../services/authService';
+import { getTranslation } from '../../i18n/translations';
 
 export const AuthContainer: React.FC = () => {
   const {
@@ -44,8 +45,11 @@ export const AuthContainer: React.FC = () => {
     registerUser,
     sendPasswordResetEmailAction,
     playAudioChime,
-    triggerConfetti
+    triggerConfetti,
+    selectedLanguage
   } = useApp();
+
+  const t = getTranslation(selectedLanguage);
 
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -129,7 +133,7 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'PATIENT',
       icon: '👤',
-      title: 'Patient / Citizen',
+      title: t.rolePatient,
       description: 'AI symptom intake, smart hospital routing, digital token tracking, and health records.',
       color: 'border-teal-500/50 hover:border-teal-400 bg-teal-950/20',
       demoUser: { email: 'rahul.kumar@care4u.nexus', name: 'Rahul Kumar' }
@@ -137,7 +141,7 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'DOCTOR',
       icon: '🩺',
-      title: 'Doctor / Clinician',
+      title: t.roleDoctor,
       description: 'Live OPD queue, AI clinical copilot, diagnostic ordering, e-prescriptions, and referrals.',
       color: 'border-blue-500/50 hover:border-blue-400 bg-blue-950/20',
       demoUser: { email: 'dr.rajesh@district-hospital.gov.in', name: 'Dr. Rajesh Sharma, MD' }
@@ -145,7 +149,7 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'HOSPITAL_ADMIN',
       icon: '🏥',
-      title: 'Hospital Administrator',
+      title: t.roleHospital,
       description: 'Real-time facility capacity, bed occupancy, doctor roster, and emergency load diversion.',
       color: 'border-indigo-500/50 hover:border-indigo-400 bg-indigo-950/20',
       demoUser: { email: 'admin@dhc.care4u.nexus', name: 'Dr. Anita Roy' }
@@ -153,7 +157,7 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'LAB_STAFF',
       icon: '🧪',
-      title: 'Diagnostic Lab Staff',
+      title: t.roleLab,
       description: 'Pathology sample tracking, test processing queue, and AI document parameter extraction.',
       color: 'border-purple-500/50 hover:border-purple-400 bg-purple-950/20',
       demoUser: { email: 'lab@dhc.care4u.nexus', name: 'Priya Deshmukh' }
@@ -161,7 +165,7 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'PHARMACY_STAFF',
       icon: '💊',
-      title: 'Pharmacy & Dispensary',
+      title: t.rolePharmacy,
       description: 'Digital prescription verification, stock inventory tracking, and closed-loop dispensing.',
       color: 'border-amber-500/50 hover:border-amber-400 bg-amber-950/20',
       demoUser: { email: 'pharma@dhc.care4u.nexus', name: 'Manoj Verma' }
@@ -169,15 +173,23 @@ export const AuthContainer: React.FC = () => {
     {
       role: 'ASHA_WORKER',
       icon: '🌾',
-      title: 'ASHA Field Worker',
+      title: t.roleAsha,
       description: 'Assisted rural citizen registration, voice symptom intake, offline sync, and SOS dispatch.',
       color: 'border-emerald-500/50 hover:border-emerald-400 bg-emerald-950/20',
       demoUser: { email: 'asha.savita@kadegaon.health.in', name: 'Savita Tai' }
     },
     {
+      role: 'AMBULANCE_OPERATOR',
+      icon: '🚑',
+      title: t.roleAmbulance,
+      description: 'Emergency dispatches, GPS hospital transit, and patient pickup OTP verification.',
+      color: 'border-red-500/50 hover:border-red-400 bg-red-950/20',
+      demoUser: { email: 'ambulance.108@nexus.health', name: 'Suresh Patil (108 Pilot)' }
+    },
+    {
       role: 'SUPER_ADMIN',
       icon: '🛡️',
-      title: 'System Administrator',
+      title: t.roleCommand,
       description: 'Protected network-wide mission control, MedRoute weights tuning, and audit telemetry.',
       color: 'border-rose-500/50 hover:border-rose-400 bg-rose-950/20',
       demoUser: { email: 'admin@nexus.health', name: 'Dr. Vikram Malhotra' }
@@ -321,14 +333,11 @@ export const AuthContainer: React.FC = () => {
           </div>
 
           <h1 className="text-4xl sm:text-6xl font-black font-display tracking-tight text-white leading-tight">
-            One Patient.{' '}
-            <span className="bg-gradient-to-r from-teal-300 via-cyan-200 to-blue-400 bg-clip-text text-transparent">
-              One Connected Care Journey.
-            </span>
+            {t.landingTitle}
           </h1>
 
           <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl mx-auto">
-            A unified, multi-role clinical coordination ecosystem connecting patients, ASHA workers, doctors, hospital administrators, diagnostic labs, pharmacies, and regional command centers.
+            {t.landingSubtitle}
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
@@ -339,7 +348,7 @@ export const AuthContainer: React.FC = () => {
               }}
               className="px-8 py-4 rounded-2xl bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-600 hover:from-teal-400 hover:to-blue-500 text-slate-950 font-bold text-base shadow-xl shadow-teal-500/25 transition cursor-pointer flex items-center gap-2"
             >
-              <span>Get Started</span>
+              <span>{t.getStarted}</span>
               <ArrowRight className="w-5 h-5" />
             </button>
 
@@ -351,7 +360,7 @@ export const AuthContainer: React.FC = () => {
               className="px-8 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white border border-slate-700 font-bold text-base shadow-lg transition cursor-pointer flex items-center gap-2"
             >
               <Lock className="w-4 h-4 text-teal-400" />
-              <span>Login to Account</span>
+              <span>{t.loginToAccount}</span>
             </button>
           </div>
         </div>
@@ -384,7 +393,7 @@ export const AuthContainer: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold text-white font-display">3. HealthAI Decision Support</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Multilingual voice symptom parsing (English, Hindi, Marathi), safety triage screening, clinical copilot interview prompts, and lab document intelligence.
+              Multilingual voice symptom parsing (English, Hindi, Marathi, Odia), safety triage screening, clinical copilot interview prompts, and lab document intelligence.
             </p>
           </div>
         </div>
@@ -405,15 +414,15 @@ export const AuthContainer: React.FC = () => {
             className="text-xs text-slate-400 hover:text-white flex items-center gap-1.5 transition cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Home</span>
+            <span>{t.backToHome}</span>
           </button>
           <span className="text-xs font-mono font-bold text-teal-400">Step 1 of 2: Role Selection</span>
         </div>
 
         <div className="text-center space-y-2">
-          <h2 className="text-2xl sm:text-3xl font-black font-display text-white">What describes you?</h2>
+          <h2 className="text-2xl sm:text-3xl font-black font-display text-white">{t.chooseRoleTitle}</h2>
           <p className="text-xs sm:text-sm text-slate-400">
-            Select your role to access your dedicated workspace and secure healthcare tools.
+            {t.chooseRoleSubtitle}
           </p>
         </div>
 
@@ -433,7 +442,7 @@ export const AuthContainer: React.FC = () => {
               </div>
 
               <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between text-xs font-semibold text-teal-300">
-                <span>Continue as {c.title.split(' ')[0]}</span>
+                <span>{t.continueAs} {c.title}</span>
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
               </div>
             </div>

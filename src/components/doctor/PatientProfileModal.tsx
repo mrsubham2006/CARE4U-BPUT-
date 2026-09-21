@@ -15,10 +15,14 @@ import {
   Video,
   Download,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  MessageSquare,
+  Send,
+  Sparkles
 } from 'lucide-react';
 import { Patient, Appointment } from '../../types';
 import { fetchPatientClinicalRecords } from './doctorService';
+import { useApp } from '../../services/store';
 
 interface PatientProfileModalProps {
   patientId: string;
@@ -35,8 +39,10 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   onClose,
   onStartConsultation
 }) => {
+  const { appointments, sendAppointmentMessage, currentUser, playAudioChime } = useApp();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'timeline' | 'health_info' | 'prescriptions' | 'labs'>('timeline');
+  const [activeTab, setActiveTab] = useState<'timeline' | 'health_info' | 'prescriptions' | 'labs' | 'messages'>('timeline');
+  const [chatInput, setChatInput] = useState('');
   const [records, setRecords] = useState<{
     consultations: any[];
     prescriptions: any[];
@@ -147,6 +153,24 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
   const chronicConditions = patientData?.chronicConditions || ['Hypertension (Stage 1)'];
   const currentMeds = patientData?.currentMedications || ['Amlodipine 5mg OD'];
 
+  const patientAppointments = appointments.filter(
+    a => a.patientId === patientId || a.patientName === (patientData?.name || patientName)
+  );
+  const activeApt = appointment || patientAppointments[0];
+  const totalMessages = patientAppointments.reduce((acc, a) => acc + (a.messages?.length || 0), 0);
+
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !activeApt) return;
+    sendAppointmentMessage(activeApt.id, {
+      sender: 'DOCTOR',
+      senderName: currentUser?.name || 'Dr. Rajesh Sharma, MD',
+      text: chatInput.trim()
+    });
+    setChatInput('');
+    if (playAudioChime) playAudioChime('click');
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden my-6 flex flex-col max-h-[90vh]">
@@ -158,35 +182,43 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-white font-display">{patientName}</h2>
+                <h2 className="text-xl font-bold text-white font-display">
+                  {patientData?.name || appointment?.patientName || patientName}
+                </h2>
                 <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-mono">
                   {patientAge}y • {patientGender}
                 </span>
                 <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold">
                   {bloodGroup}
                 </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono font-bold">
+                  ABDM VERIFIED
+                </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-3 font-mono">
-                <span>ABDM ID: {patientData?.healthId || `ABDM-${patientId.substring(0, 8)}`}</span>
-                <span>•</span>
-                <span>Phone: {phone}</span>
+              <p className="text-xs text-slate-400 mt-0.5">
+                ABHA ID: <strong className="text-slate-200">{patientData?.healthId || '91-4829-1029-4412'}</strong> • Phone: {phone}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {appointment && (
-              <button
-                onClick={() => {
-                  onClose();
-                  onStartConsultation(appointment, 'OPD');
-                }}
-                className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md"
-              >
-                <Stethoscope className="w-4 h-4" />
-                <span>Start Consultation</span>
-              </button>
-            )}
+          <div className="flex items-center gap-2">
+            {appointment &&
+              appointment.status !== 'COMPLETED' &&
+              appointment.status !== 'CONSULTATION_COMPLETED' && (
+                <button
+                  onClick={() =>
+                    onStartConsultation(
+                      appointment,
+                      appointment.consultationType === 'VIDEO' ? 'VIDEO_CONSULTATION' : 'OPD'
+                    )
+                  }
+                  className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md"
+                >
+                  <Stethoscope className="w-3.5 h-3.5" />
+                  <span>Start Consultation Now</span>
+                </button>
+              )}
+
             <button
               onClick={onClose}
               className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
@@ -197,20 +229,20 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
         </div>
 
         {/* Navigation Tabs inside modal */}
-        <div className="flex border-b border-slate-800 px-6 bg-slate-950/40">
+        <div className="flex border-b border-slate-800 px-6 bg-slate-950/40 overflow-x-auto">
           <button
             onClick={() => setActiveTab('timeline')}
-            className={`py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+            className={`py-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'timeline'
                 ? 'border-teal-400 text-teal-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Chronological Medical Timeline ({timelineItems.length})
+            Chronological Timeline ({timelineItems.length})
           </button>
           <button
             onClick={() => setActiveTab('health_info')}
-            className={`py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+            className={`py-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'health_info'
                 ? 'border-teal-400 text-teal-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -220,23 +252,34 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('prescriptions')}
-            className={`py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+            className={`py-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'prescriptions'
                 ? 'border-teal-400 text-teal-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Past Prescriptions ({records.prescriptions.length})
+            Prescriptions ({records.prescriptions.length})
           </button>
           <button
             onClick={() => setActiveTab('labs')}
-            className={`py-3 px-4 text-xs font-bold transition border-b-2 cursor-pointer ${
+            className={`py-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'labs'
                 ? 'border-teal-400 text-teal-300'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Diagnostic Lab Tests ({records.labOrders.length})
+            Lab Tests ({records.labOrders.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('messages')}
+            className={`py-3 px-4 text-xs font-bold transition border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'messages'
+                ? 'border-teal-400 text-teal-300'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Messages & Chat ({totalMessages})</span>
           </button>
         </div>
 
@@ -398,7 +441,7 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                 ))
               )}
             </div>
-          ) : (
+          ) : activeTab === 'labs' ? (
             <div className="space-y-3">
               {records.labOrders.length === 0 ? (
                 <p className="text-xs text-slate-500 py-8 text-center">No past diagnostic lab orders.</p>
@@ -418,6 +461,111 @@ export const PatientProfileModal: React.FC<PatientProfileModalProps> = ({
                     </p>
                   </div>
                 ))
+              )}
+            </div>
+          ) : (
+            /* Patient Direct Messages & Chat Tab */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-teal-400" />
+                    <span>Clinical Messages & Teleconsultation Thread</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Direct communication with {patientData?.name || appointment?.patientName || 'patient'}
+                  </p>
+                </div>
+                {activeApt && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    Token #{activeApt.token?.tokenNumber || 'APT'}
+                  </span>
+                )}
+              </div>
+
+              {/* Message Bubble Feed */}
+              <div className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800/80 min-h-[220px] max-h-[340px] overflow-y-auto space-y-3">
+                {(!activeApt?.messages || activeApt.messages.length === 0) ? (
+                  <div className="py-12 text-center text-slate-500 space-y-2">
+                    <MessageSquare className="w-8 h-8 mx-auto text-slate-600" />
+                    <p className="text-xs font-semibold text-slate-400">No messages exchanged yet</p>
+                    <p className="text-[11px] text-slate-500">
+                      Type a clinical note or instruction below to send to the patient.
+                    </p>
+                  </div>
+                ) : (
+                  activeApt.messages.map((msg: any, idx: number) => {
+                    const isDoctor = msg.sender === 'DOCTOR';
+                    return (
+                      <div
+                        key={msg.id || idx}
+                        className={`flex flex-col ${isDoctor ? 'items-end' : 'items-start'}`}
+                      >
+                        <div className="flex items-center gap-2 mb-1 px-1">
+                          <span className="text-[11px] font-bold text-slate-300">
+                            {isDoctor ? (msg.senderName || 'You (Doctor)') : (msg.senderName || 'Patient')}
+                          </span>
+                          <span className="text-[10px] text-slate-500 font-mono">{msg.timestamp}</span>
+                        </div>
+                        <div
+                          className={`p-3 rounded-2xl max-w-lg text-xs leading-relaxed ${
+                            isDoctor
+                              ? 'bg-teal-500 text-slate-950 font-medium rounded-tr-none shadow-md'
+                              : 'bg-slate-800/90 text-slate-100 border border-slate-700/80 rounded-tl-none'
+                          }`}
+                        >
+                          {msg.text}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Quick Canned Suggestions */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                <span className="text-[10px] text-slate-500 uppercase font-mono shrink-0 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-teal-400" /> Canned:
+                </span>
+                {[
+                  'Prescription issued. Please visit pharmacy counter.',
+                  'CBC lab tests ordered. Please submit sample at pathology.',
+                  'Please join video consultation room.',
+                  'Stay hydrated and follow up in 5 days if fever persists.'
+                ].map((sug, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setChatInput(sug)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-[11px] whitespace-nowrap transition cursor-pointer border border-slate-700"
+                  >
+                    {sug}
+                  </button>
+                ))}
+              </div>
+
+              {/* Message Input Box */}
+              {activeApt ? (
+                <form onSubmit={handleSendChat} className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                  <input
+                    type="text"
+                    placeholder="Type clinical note / message to patient..."
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim()}
+                    className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 disabled:opacity-50 text-slate-950 font-bold text-xs transition cursor-pointer flex items-center gap-1.5 shadow-md"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send</span>
+                  </button>
+                </form>
+              ) : (
+                <p className="text-xs text-slate-500 text-center py-2">
+                  No active appointment record found to anchor patient messaging.
+                </p>
               )}
             </div>
           )}

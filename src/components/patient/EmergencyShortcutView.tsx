@@ -14,16 +14,31 @@ import {
 import { useApp } from '../../services/store';
 
 export const EmergencyShortcutView: React.FC = () => {
-  const { facilities, activePatient, playAudioChime } = useApp();
+  const { facilities, activePatient, requestAmbulance, playAudioChime, triggerConfetti } = useApp();
 
   const [sosTriggered, setSosTriggered] = useState(false);
+  const [activeTrip, setActiveTrip] = useState<any>(null);
   const [etaMinutes, setEtaMinutes] = useState(8);
 
   const emergencyHospitals = facilities.filter(f => f.emergencyCapability || (f.emergencyBedsAvailable && f.emergencyBedsAvailable > 0) || f.type === 'District Hospital');
 
-  const handleTriggerSOS = () => {
+  const handleTriggerSOS = async () => {
     playAudioChime('alert');
-    setSosTriggered(true);
+    const targetFac = emergencyHospitals[0] || facilities[0];
+    try {
+      const trip = await requestAmbulance(
+        activePatient.id,
+        activePatient.address || activePatient.villageOrCity || 'Kadegaon Ward 3',
+        targetFac.id,
+        'Advanced Cardiac Life Support (ACLS)',
+        'CRITICAL'
+      );
+      setActiveTrip(trip);
+      setSosTriggered(true);
+      triggerConfetti();
+    } catch {
+      setSosTriggered(true);
+    }
   };
 
   return (
@@ -46,7 +61,7 @@ export const EmergencyShortcutView: React.FC = () => {
 
           <button
             onClick={handleTriggerSOS}
-            className="px-8 py-5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-base flex items-center gap-3 shadow-2xl shadow-red-950 border-2 border-white/20 transition-transform active:scale-95"
+            className="px-8 py-5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-black text-base flex items-center gap-3 shadow-2xl shadow-red-950 border-2 border-white/20 transition-transform active:scale-95 cursor-pointer"
           >
             <PhoneCall className="w-6 h-6 animate-bounce" />
             <span>DISPATCH 108 AMBULANCE</span>
@@ -58,12 +73,30 @@ export const EmergencyShortcutView: React.FC = () => {
             <div className="flex items-center justify-between text-red-200 font-bold">
               <span className="flex items-center gap-2">
                 <Ambulance className="w-5 h-5 text-white animate-pulse" />
-                <span>Ambulance Unit #AMB-402 Dispatched</span>
+                <span>
+                  Ambulance Unit {activeTrip ? `#${activeTrip.vehicleNumber}` : '#MH-12-EM-1088'} Dispatched
+                </span>
               </span>
-              <span className="font-mono text-white text-sm">ETA: ~{etaMinutes} Mins</span>
+              <span className="font-mono text-white text-sm">
+                ETA: ~{activeTrip ? activeTrip.etaMinutes : etaMinutes} Mins
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-black/40 p-3 rounded-xl border border-red-500/30">
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase block font-mono">Mission ID</span>
+                <span className="font-mono text-white font-bold">{activeTrip ? activeTrip.id : 'amb-101'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase block font-mono">Driver / Pilot</span>
+                <span className="text-white font-bold">{activeTrip ? activeTrip.driverName : 'Suresh Patil (108 Pilot)'}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 text-[10px] uppercase block font-mono">Your Pickup OTP</span>
+                <span className="font-mono text-emerald-300 font-black text-sm tracking-widest">{activeTrip ? activeTrip.otp : '4821'}</span>
+              </div>
             </div>
             <p className="text-red-100">
-              GPS Coordinates transmitted: <strong>19.0760° N, 72.8777° E</strong>. Parametric vital telemetry pre-alerted to District Health Centre Emergency Room.
+              GPS telemetry live-streamed to {activeTrip ? activeTrip.destinationFacilityName : 'District Health Centre Emergency Room'}. Destination Trauma ICU team pre-notified.
             </p>
           </div>
         )}

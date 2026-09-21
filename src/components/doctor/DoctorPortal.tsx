@@ -20,6 +20,7 @@ import { ReferralsAndFollowUpsView } from './ReferralsAndFollowUpsView';
 import { DoctorNotificationsAndProfileView } from './DoctorNotificationsAndProfileView';
 import { Appointment, Prescription, LabOrder, FollowUp } from '../../types';
 import { ShieldAlert, LogIn, Activity } from 'lucide-react';
+import { voiceCommandService } from '../../services/voiceCommandService';
 
 export const DoctorPortal: React.FC = () => {
   const {
@@ -116,18 +117,26 @@ export const DoctorPortal: React.FC = () => {
     };
   }, [doctorId]);
 
-  // Combine Firestore data with local fallback store data to guarantee zero interruption
-  const mergedAppointments: Appointment[] =
-    firestoreAppointments.length > 0 ? firestoreAppointments : storeAppointments;
+  // Combine Firestore data with local store data deduplicated by ID to guarantee real-time synchronization
+  const mergedAppointments: Appointment[] = [
+    ...firestoreAppointments,
+    ...storeAppointments.filter(sa => !firestoreAppointments.some(fa => fa.id === sa.id))
+  ];
 
-  const mergedPrescriptions: Prescription[] =
-    firestorePrescriptions.length > 0 ? firestorePrescriptions : storePrescriptions;
+  const mergedPrescriptions: Prescription[] = [
+    ...firestorePrescriptions,
+    ...storePrescriptions.filter(sp => !firestorePrescriptions.some(fp => fp.id === sp.id))
+  ];
 
-  const mergedLabOrders: LabOrder[] =
-    firestoreLabOrders.length > 0 ? firestoreLabOrders : storeLabOrders;
+  const mergedLabOrders: LabOrder[] = [
+    ...firestoreLabOrders,
+    ...storeLabOrders.filter(sl => !firestoreLabOrders.some(fl => fl.id === sl.id))
+  ];
 
-  const mergedFollowUps: FollowUp[] =
-    firestoreFollowUps.length > 0 ? firestoreFollowUps : storeFollowUps;
+  const mergedFollowUps: FollowUp[] = [
+    ...firestoreFollowUps,
+    ...storeFollowUps.filter(sf => !firestoreFollowUps.some(ff => ff.id === sf.id))
+  ];
 
   // Counts for Badges
   const todayStr = new Date().toISOString().split('T')[0];
@@ -175,6 +184,28 @@ export const DoctorPortal: React.FC = () => {
     if (playAudioChime) playAudioChime('click');
     window.location.reload();
   };
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'DOCTOR_ACTION') {
+        if (action.payload === 'NEXT_PATIENT') {
+          const nextAppt = mergedAppointments.find(
+            a => a.status === 'CHECKED_IN' || a.status === 'CONFIRMED' || a.status === 'BOOKED'
+          ) || mergedAppointments[0];
+          if (nextAppt) {
+            handleStartConsultation(nextAppt, 'OPD');
+            setCurrentTab('consultations');
+            if (triggerConfetti) triggerConfetti();
+          }
+        } else if (action.payload === 'OPD_QUEUE') {
+          setCurrentTab('opd_queue');
+        } else if (action.payload === 'CONSULTATION_TAB') {
+          setCurrentTab('consultations');
+        }
+      }
+    });
+    return () => unsub();
+  }, [mergedAppointments, playAudioChime, triggerConfetti]);
 
   // Role Protection Verification
   const isDoctorRole =

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../services/store';
 import { Language } from '../../types';
+import { SUPPORTED_LANGUAGES, getTranslation } from '../../i18n/translations';
 import {
   Mic,
   MicOff,
@@ -25,31 +26,126 @@ export const SarvamVoiceModal: React.FC<SarvamVoiceModalProps> = ({
   onIntakeCompleted
 }) => {
   const { runSarvamVoiceAI, selectedLanguage, setSelectedLanguage, playAudioChime, triggerConfetti } = useApp();
+  const t = getTranslation(selectedLanguage);
 
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [micError, setMicError] = useState<string | null>(null);
   const [recordedResult, setRecordedResult] = useState<{
     transcript: string;
     translatedEnglish: string;
     intake: any;
   } | null>(null);
 
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup recognition on unmount
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
+    };
+  }, []);
+
+  const SPEECH_LANG_MAP: Record<string, string> = {
+    en: 'en-IN', hi: 'hi-IN', or: 'or-IN', mr: 'mr-IN',
+    bn: 'bn-IN', te: 'te-IN', ta: 'ta-IN', kn: 'kn-IN',
+    gu: 'gu-IN', pa: 'pa-IN', ml: 'ml-IN'
+  };
+
+  // Keep a ref to latest liveTranscript so recognition.onend closure can read it
+  const liveTranscriptRef = useRef('');
+  useEffect(() => {
+    liveTranscriptRef.current = liveTranscript;
+  }, [liveTranscript]);
+
   if (!isOpen) return null;
 
   const handleStartVoiceIntake = async () => {
-    setIsRecording(true);
+    if (isRecording || isProcessing) return;
     playAudioChime('click');
+    setMicError(null);
+    setLiveTranscript('');
+    setRecordedResult(null);
 
-    // Simulate 2 seconds of Indian language speech listening
-    setTimeout(async () => {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMicError('Web Speech API is not supported in this browser. Please use Chrome or Edge.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+    recognition.lang = SPEECH_LANG_MAP[selectedLanguage] || 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      setIsRecording(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      let final = '';
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setLiveTranscript(final || interim);
+    };
+
+    recognition.onerror = (event: any) => {
       setIsRecording(false);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        setMicError('Microphone access was denied. Please allow microphone permissions and try again.');
+      } else if (event.error === 'no-speech') {
+        setMicError('No speech detected. Please speak clearly and try again.');
+      } else {
+        setMicError(`Speech recognition error: ${event.error}. Please try again.`);
+      }
+    };
+
+    recognition.onend = async () => {
+      setIsRecording(false);
+      const capturedTranscript = liveTranscriptRef.current;
+      if (!capturedTranscript.trim()) {
+        if (!micError) setMicError('No speech was captured. Please try again and speak clearly.');
+        return;
+      }
       setIsProcessing(true);
-      const res = await runSarvamVoiceAI(selectedLanguage);
-      setRecordedResult(res);
+      try {
+        const res = await runSarvamVoiceAI(selectedLanguage);
+        // Merge the real transcript into the result
+        setRecordedResult({
+          ...res,
+          transcript: capturedTranscript
+        });
+      } catch (err) {
+        setMicError('Failed to process voice intake. Please try again.');
+      }
       setIsProcessing(false);
       playAudioChime('success');
       triggerConfetti();
-    }, 1800);
+    };
+
+    try {
+      recognition.start();
+    } catch (err) {
+      setMicError('Failed to start microphone. Please check your browser permissions.');
+    }
+  };
+
+  const handleStopRecording = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
   };
 
   const handleApplyAndContinue = () => {
@@ -90,30 +186,29 @@ export const SarvamVoiceModal: React.FC<SarvamVoiceModalProps> = ({
         <div className="p-6 space-y-6 text-xs">
           {/* Language selector */}
           <div className="space-y-1.5">
-            <label className="text-slate-300 font-semibold flex items-center gap-1.5">
-              <Globe className="w-4 h-4 text-teal-400" />
-              <span>Select Spoken Language:</span>
+            <label className="text-slate-300 font-semibold flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Globe className="w-4 h-4 text-teal-400" />
+                <span>{t.selectLanguage || 'Select Spoken Language'}:</span>
+              </span>
+              <span className="text-[10px] text-slate-400">{SUPPORTED_LANGUAGES.length} Indian Languages</span>
             </label>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { code: 'hi' as Language, label: 'हिन्दी (Hindi)' },
-                { code: 'or' as Language, label: 'ଓଡ଼ିଆ (Odia)' },
-                { code: 'mr' as Language, label: 'मराठी (Marathi)' },
-                { code: 'en' as Language, label: 'English' }
-              ].map(item => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-36 overflow-y-auto pr-1">
+              {SUPPORTED_LANGUAGES.map(item => (
                 <button
                   key={item.code}
                   onClick={() => {
                     setSelectedLanguage(item.code);
                     playAudioChime('click');
                   }}
-                  className={`p-2.5 rounded-xl border text-center font-bold text-xs transition cursor-pointer ${
+                  className={`p-2 rounded-xl border text-center font-bold text-xs transition cursor-pointer flex items-center justify-between gap-1.5 ${
                     selectedLanguage === item.code
-                      ? 'bg-teal-600 text-white border-teal-400 shadow-md'
-                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white'
+                      ? 'bg-teal-600 text-white border-teal-400 shadow-md shadow-teal-900/30'
+                      : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                   }`}
                 >
-                  {item.label}
+                  <span className="truncate">{item.nativeName}</span>
+                  <span className="text-[10px] font-mono text-teal-300/80 uppercase shrink-0">{item.code}</span>
                 </button>
               ))}
             </div>
@@ -122,8 +217,8 @@ export const SarvamVoiceModal: React.FC<SarvamVoiceModalProps> = ({
           {/* Voice Record Sphere */}
           <div className="py-6 flex flex-col items-center justify-center space-y-4">
             <button
-              onClick={handleStartVoiceIntake}
-              disabled={isRecording || isProcessing}
+              onClick={isRecording ? handleStopRecording : handleStartVoiceIntake}
+              disabled={isProcessing}
               className={`w-28 h-28 rounded-full flex flex-col items-center justify-center border-4 transition transform active:scale-95 cursor-pointer shadow-2xl ${
                 isRecording
                   ? 'bg-red-600 border-red-400 text-white animate-pulse shadow-red-500/50'
@@ -135,7 +230,7 @@ export const SarvamVoiceModal: React.FC<SarvamVoiceModalProps> = ({
               {isRecording ? (
                 <>
                   <Radio className="w-10 h-10 animate-ping" />
-                  <span className="text-[10px] font-bold uppercase mt-1">Listening...</span>
+                  <span className="text-[10px] font-bold uppercase mt-1">Tap to Stop</span>
                 </>
               ) : isProcessing ? (
                 <>
@@ -150,12 +245,26 @@ export const SarvamVoiceModal: React.FC<SarvamVoiceModalProps> = ({
               )}
             </button>
 
+            {/* Live transcript ticker */}
+            {liveTranscript && (
+              <div className="bg-slate-950 border border-teal-500/30 rounded-xl px-4 py-2 text-xs text-teal-300 max-w-sm text-center animate-pulse">
+                🎙️ &quot;{liveTranscript}&quot;
+              </div>
+            )}
+
+            {/* Mic error message */}
+            {micError && (
+              <div className="bg-rose-950/60 border border-rose-500/40 rounded-xl px-4 py-2 text-xs text-rose-300 max-w-sm text-center">
+                ⚠️ {micError}
+              </div>
+            )}
+
             <p className="text-xs text-slate-400 text-center max-w-sm">
               {isRecording
-                ? 'Speak clearly into your microphone about your symptoms...'
+                ? 'Speak clearly about your symptoms. Tap again to stop.'
                 : isProcessing
-                ? 'Sarvam Indic AI translating speech to medical English...'
-                : 'Click to start voice intake. Voice audio is processed locally and via Sarvam Indic Gateway.'}
+                ? 'Sarvam Indic AI structuring your intake...'
+                : 'Tap to start voice intake. Your mic captures live speech in your selected language.'}
             </p>
           </div>
 

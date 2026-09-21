@@ -28,6 +28,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
     demoStep,
     goToDemoStep,
     currentUserRole,
+    switchRole,
     runAIIntake,
     runTriageAssessment,
     computeMedRoute,
@@ -45,6 +46,14 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
     triggerConfetti
   } = useApp();
 
+  const navigateStep = (stepNum: number) => {
+    const targetTour = tourSteps.find(t => t.step === stepNum);
+    if (targetTour && targetTour.role) {
+      switchRole(targetTour.role as any);
+    }
+    goToDemoStep(stepNum);
+  };
+
   if (!isOpen) return null;
 
   const tourSteps = [
@@ -60,7 +69,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
         const intake = await runAIIntake('I have fever since yesterday and severe weakness with mild headache.', 'en');
         await runTriageAssessment(intake);
         computeMedRoute('General Medicine', false);
-        goToDemoStep(2);
+        navigateStep(2);
       }
     },
     {
@@ -73,7 +82,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
       actionLabel: 'View Triage & MedRoute Options',
       autoAction: async () => {
         computeMedRoute('General Medicine', false);
-        goToDemoStep(3);
+        navigateStep(3);
       }
     },
     {
@@ -88,7 +97,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
         const targetFac = facilities.find(f => f.name.includes('District')) || facilities[0];
         const targetDoc = doctors.find(d => d.facilityId === targetFac.id && d.department === 'General Medicine') || doctors[0];
         await bookAppointment(targetFac.id, targetDoc.id, '10:30 AM', 'Fever and generalized weakness since 1 day', 'SAME_DAY');
-        goToDemoStep(4);
+        navigateStep(4);
       }
     },
     {
@@ -100,7 +109,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
       desc: 'Hospital admin sees incoming Token A-027 in live queue. Demo the killer moment: toggle MRI/Overload and see MedRoute recommendations recalculate live across the network!',
       actionLabel: 'Proceed to Doctor Consultation',
       autoAction: () => {
-        goToDemoStep(5);
+        navigateStep(5);
       }
     },
     {
@@ -127,7 +136,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
             followUpDate: new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0]
           });
         }
-        goToDemoStep(6);
+        navigateStep(6);
       }
     },
     {
@@ -143,7 +152,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
         if (order) {
           updateLabOrderStatus(order.id, 'REPORT_READY');
         }
-        goToDemoStep(7);
+        navigateStep(7);
       }
     },
     {
@@ -159,7 +168,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
         if (rx) {
           dispensePrescription(rx.id);
         }
-        goToDemoStep(8);
+        navigateStep(8);
       }
     },
     {
@@ -171,7 +180,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
       desc: 'Rahul receives instant notification: prescription dispensed, lab report ready with AI summary, and follow-up scheduled for 3 days later. Care continuity intact!',
       actionLabel: 'View NEXUS Command Center',
       autoAction: () => {
-        goToDemoStep(9);
+        navigateStep(9);
       }
     },
     {
@@ -183,7 +192,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
       desc: 'NEXUS Command Center monitors 42 connected facilities, emergency loads, live queue latencies, stock levels, and automated AI capacity re-routing alerts.',
       actionLabel: 'Restart Guided Demo Tour',
       autoAction: () => {
-        goToDemoStep(1);
+        navigateStep(1);
       }
     }
   ];
@@ -234,7 +243,7 @@ export const DemoJourneyWalkthrough: React.FC<DemoTourProps> = ({ isOpen, onClos
             key={s.step}
             onClick={() => {
               playAudioChime('click');
-              goToDemoStep(s.step);
+              navigateStep(s.step);
             }}
             className={`w-2 h-2 rounded-full transition cursor-pointer ${
               s.step === demoStep

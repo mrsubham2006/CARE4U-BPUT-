@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../services/store';
+import { voiceCommandService } from '../../services/voiceCommandService';
 import {
   Pill,
   Package,
@@ -31,6 +32,20 @@ export const PharmacyPortal: React.FC = () => {
     playAudioChime('click');
     dispensePrescription(rxId);
   };
+
+  useEffect(() => {
+    const unsub = voiceCommandService.subscribe(action => {
+      if (action.type === 'DISPENSE_PRESCRIPTION') {
+        const targetRx = prescriptions.find(p => p.status === 'PENDING') || selectedRx;
+        if (targetRx) {
+          dispensePrescription(targetRx.id);
+          playAudioChime('success');
+          triggerConfetti();
+        }
+      }
+    });
+    return () => unsub();
+  }, [prescriptions, selectedRx, dispensePrescription, playAudioChime, triggerConfetti]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">

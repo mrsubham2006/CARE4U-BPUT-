@@ -698,3 +698,27 @@ export interface IntegrationStatus {
   setupInstructions: string;
 }
 
+export type PatientViewTab =
+  | 'HOME'
+  | 'PROFILE'
+  | 'AI_INTAKE'
+  | 'FIND_CARE'
+  | 'BOOK_APPOINTMENT'
+  | 'MY_APPOINTMENTS'
+  | 'QUEUE_PASS'
+  | 'PRESCRIPTIONS'
+  | 'MEDICINES_SCHEDULE'
+  | 'LAB_REPORTS'
+  | 'HEALTH_WALLET'
+  | 'TIMELINE'
+  | 'CONSENT_SHARING'
+  | 'HEALTH_ID_QR'
+  | 'VIDEO_CONSULTATION'
+  | 'DOCTOR_MESSAGING'
+  | 'EMERGENCY_SOS'
+  | 'VITALS_ANALYTICS'
+  | 'FAMILY_PROFILES'
+  | 'INSURANCE_PMJAY'
+  | 'PAYMENTS_BILLING';
+
+
